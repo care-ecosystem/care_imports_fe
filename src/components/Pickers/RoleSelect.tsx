@@ -14,7 +14,7 @@ export interface RoleRead {
   description?: string;
 }
 
-interface RolePickerProps {
+interface RoleSelectProps {
   roles: RoleRead[];
   value: string;
   onChange: (roleId: string) => void;
@@ -25,7 +25,7 @@ interface RolePickerProps {
   disabled?: boolean;
 }
 
-export default function RolePicker({
+export default function RoleSelect({
   roles,
   value,
   onChange,
@@ -34,7 +34,7 @@ export default function RolePicker({
   isLoading = false,
   placeholder = "Select a role",
   disabled = false,
-}: RolePickerProps) {
+}: RoleSelectProps) {
   return (
     <Select value={value} onValueChange={onChange} disabled={disabled}>
       <SelectTrigger className="w-full">
@@ -51,7 +51,7 @@ export default function RolePicker({
               placeholder="Search roles"
               value={searchQuery}
               onChange={(event) => onSearchChange(event.target.value)}
-              className="w-full rounded-md border border-gray-200 px-9 py-2 text-sm"
+              className="w-full rounded-md border border-gray-200 py-2 pl-10 pr-3 text-sm"
             />
           </div>
         </div>

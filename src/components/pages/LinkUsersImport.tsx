@@ -1,12 +1,12 @@
+import { useMutation, useQuery } from "@tanstack/react-query";
 import { AlertCircle, Upload } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
 
 import { queryString, request } from "@/apis/request";
-import DepartmentPicker, {
+import DepartmentSelect, {
   FacilityOrganizationRead,
-} from "@/components/Pickers/DepartmentPicker";
-import RolePicker, { RoleRead } from "@/components/Pickers/RolePicker";
+} from "@/components/Pickers/DepartmentSelect";
+import RoleSelect, { RoleRead } from "@/components/Pickers/RoleSelect";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import {
@@ -35,7 +35,6 @@ interface UserReadMinimal {
 
 interface LinkUserRow {
   rowIndex: number;
-  userId?: string;
   username?: string;
   resolvedUserId?: string;
   status:
@@ -50,23 +49,16 @@ interface LinkUserRow {
   message?: string;
 }
 
-const UUID_PATTERN =
-  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
-
 const normalizeHeader = (value: string) =>
   value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 const buildHeaderMap = (headers: string[]) => {
-  const headerMap: Record<"user_id" | "username", number | undefined> = {
-    user_id: undefined,
+  const headerMap: Record<"username", number | undefined> = {
     username: undefined,
   };
 
   headers.forEach((header, index) => {
     const normalized = normalizeHeader(header);
-    if (normalized === "userid" || normalized === "user_id") {
-      headerMap.user_id = index;
-    }
     if (normalized === "username" || normalized === "user_name") {
       headerMap.username = index;
     }
@@ -156,26 +148,18 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
         }
 
         const headerMap = buildHeaderMap(headers);
-        if (
-          headerMap.user_id === undefined &&
-          headerMap.username === undefined
-        ) {
-          setUploadError("CSV must include at least one of: user_id, username");
+        if (headerMap.username === undefined) {
+          setUploadError("CSV must include: username");
           return;
         }
 
         const parsedRows: LinkUserRow[] = rows.map((row, index) => {
-          const userId =
-            headerMap.user_id !== undefined
-              ? row[headerMap.user_id]?.trim()
-              : "";
           const username =
             headerMap.username !== undefined
               ? row[headerMap.username]?.trim()
               : "";
           return {
             rowIndex: index + 2,
-            userId: userId || undefined,
             username: username || undefined,
             status: "pending",
           };
@@ -201,20 +185,13 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
         const row = inputRows[index];
         let updatedRow: LinkUserRow = { ...row };
 
-        const hasUserId = Boolean(row.userId);
         const hasUsername = Boolean(row.username);
 
-        if (!hasUserId && !hasUsername) {
+        if (!hasUsername) {
           updatedRow = {
             ...updatedRow,
             status: "invalid",
-            message: "Missing user_id or username",
-          };
-        } else if (row.userId && UUID_PATTERN.test(row.userId)) {
-          updatedRow = {
-            ...updatedRow,
-            resolvedUserId: row.userId,
-            status: "ready",
+            message: "Missing username",
           };
         } else if (row.username) {
           try {
@@ -234,12 +211,6 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
               message: "User not found",
             };
           }
-        } else if (row.userId) {
-          updatedRow = {
-            ...updatedRow,
-            status: "invalid",
-            message: "Invalid user_id format",
-          };
         }
 
         if (updatedRow.resolvedUserId) {
@@ -319,7 +290,9 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
           });
         } catch (error: any) {
           const errorMessage =
-            typeof error?.message === "string" ? error.message : "Unknown error";
+            typeof error?.message === "string"
+              ? error.message
+              : "Unknown error";
 
           if (errorMessage.includes("User association already exists")) {
             updatedRows.push({
@@ -358,9 +331,9 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
   }, [facilityId, selectedOrg, selectedRoleId, linkUsersMutation, rows]);
 
   const downloadSample = () => {
-    const sampleCSV = `user_id,username
-,alice
-8f10d57d-2d7e-4682-a361-da47b2edac5a,`;
+    const sampleCSV = `username
+johndon_dhm
+bob_ssmm`;
     const blob = new Blob([sampleCSV], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -388,8 +361,7 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
               Link Users to Department
             </CardTitle>
             <CardDescription>
-              Select a department and role, then upload a CSV with user_id or
-              username.
+              Select a department and role, then upload a CSV with username.
             </CardDescription>
           </CardHeader>
           <CardContent className="space-y-6">
@@ -398,7 +370,7 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
                 <label className="text-sm font-medium text-gray-700">
                   Department / Sub-Department
                 </label>
-                <DepartmentPicker
+                <DepartmentSelect
                   organizations={organizations}
                   value={selectedOrg}
                   onChange={setSelectedOrg}
@@ -410,7 +382,7 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
                 <label className="text-sm font-medium text-gray-700">
                   Role
                 </label>
-                <RolePicker
+                <RoleSelect
                   roles={roles}
                   value={selectedRoleId}
                   onChange={setSelectedRoleId}
@@ -440,7 +412,7 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
                     <p className="text-sm text-gray-500">or drag and drop</p>
                   </div>
                   <p className="text-xs text-gray-400">
-                    Expected columns: user_id, username
+                    Expected columns: username
                   </p>
                   <Button variant="outline" size="sm" onClick={downloadSample}>
                     Download Sample CSV
@@ -488,7 +460,6 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
                   <thead className="bg-gray-50 text-left">
                     <tr>
                       <th className="px-3 py-2">Row</th>
-                      <th className="px-3 py-2">User ID</th>
                       <th className="px-3 py-2">Username</th>
                       <th className="px-3 py-2">Resolved User ID</th>
                       <th className="px-3 py-2">Status</th>
@@ -499,7 +470,6 @@ export default function LinkUsersImport({ facilityId }: LinkUsersImportProps) {
                     {rows.map((row) => (
                       <tr key={row.rowIndex} className="border-t">
                         <td className="px-3 py-2">{row.rowIndex}</td>
-                        <td className="px-3 py-2">{row.userId ?? "-"}</td>
                         <td className="px-3 py-2">{row.username ?? "-"}</td>
                         <td className="px-3 py-2">
                           {row.resolvedUserId ?? "-"}

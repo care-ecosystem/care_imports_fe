@@ -584,38 +584,36 @@ async function createSlug(name, maxLength = 25, disablePadding = false) {
   if (!name) {
     return "";
   }
+  const baseLength = Math.min(maxLength, 18);
   let slug = name.toLowerCase();
   slug = slug.replace(/[^a-z0-9\s_-]/g, "");
   slug = slug.replace(/\s+/g, "-");
   slug = slug.replace(/-+/g, "-");
   slug = slug.trim();
-  slug = slug.slice(0, maxLength);
-  if (slug.length < maxLength && !disablePadding) {
-    const encoder = new TextEncoder();
-    const data = encoder.encode(slug);
-    const hashBuffer = await crypto.subtle.digest("SHA-256", data);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
-    const neededHash = maxLength - slug.length - 1;
-    if (neededHash > 0) {
-      slug = `${slug}-${hashHex.slice(0, neededHash)}`;
-    }
+  slug = slug.slice(0, baseLength);
+  if (disablePadding) {
+    return slug;
   }
-  return slug;
+  const encoder = new TextEncoder();
+  const data = encoder.encode(name);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hashHex = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
+  return `${slug}-${hashHex.slice(0, 7)}`;
 }
 
-const {useMemo: useMemo$4,useState: useState$8} = await importShared('react');
-const REQUIRED_HEADERS$3 = ["title", "description", "purpose", "price"];
+const {useMemo: useMemo$5,useState: useState$9} = await importShared('react');
+const REQUIRED_HEADERS$4 = ["title", "description", "purpose", "price"];
 const normalizeHeader$4 = (header) => header.toLowerCase().replace(/[^a-z0-9]/g, "");
 function ChargeItemDefinitionImport({
   facilityId
 }) {
-  const [categoryTitle, setCategoryTitle] = useState$8("");
-  const [currentStep, setCurrentStep] = useState$8("upload");
-  const [uploadError, setUploadError] = useState$8("");
-  const [processedRows, setProcessedRows] = useState$8([]);
-  const [results, setResults] = useState$8(null);
-  const summary = useMemo$4(() => {
+  const [categoryTitle, setCategoryTitle] = useState$9("");
+  const [currentStep, setCurrentStep] = useState$9("upload");
+  const [uploadError, setUploadError] = useState$9("");
+  const [processedRows, setProcessedRows] = useState$9([]);
+  const [results, setResults] = useState$9(null);
+  const summary = useMemo$5(() => {
     const valid = processedRows.filter((row) => row.errors.length === 0).length;
     const invalid = processedRows.length - valid;
     return { total: processedRows.length, valid, invalid };
@@ -644,7 +642,7 @@ function ChargeItemDefinitionImport({
           },
           {}
         );
-        const missingHeaders = REQUIRED_HEADERS$3.filter(
+        const missingHeaders = REQUIRED_HEADERS$4.filter(
           (header) => headerMap[header] === void 0
         );
         if (missingHeaders.length > 0) {
@@ -978,8 +976,8 @@ function Badge({
   );
 }
 
-const {useState: useState$7} = await importShared('react');
-const REQUIRED_HEADERS$2 = ["department", "subdepartment"];
+const {useState: useState$8} = await importShared('react');
+const REQUIRED_HEADERS$3 = ["department", "subdepartment"];
 const normalizeHeader$3 = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 const buildHeaderMap$2 = (headers) => {
   const headerMap = {};
@@ -1013,9 +1011,9 @@ const buildDepartmentTree = (rows) => {
 function DepartmentImport({
   facilityId
 }) {
-  const [currentStep, setCurrentStep] = useState$7("upload");
-  const [uploadError, setUploadError] = useState$7("");
-  const [departments, setDepartments] = useState$7([]);
+  const [currentStep, setCurrentStep] = useState$8("upload");
+  const [uploadError, setUploadError] = useState$8("");
+  const [departments, setDepartments] = useState$8([]);
   const handleFileUpload = (event) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -1034,7 +1032,7 @@ function DepartmentImport({
         }
         const headers = rows[0].split(",").map((h) => h.trim().replace(/"/g, ""));
         const headerMap = buildHeaderMap$2(headers);
-        const missingHeaders = REQUIRED_HEADERS$2.filter(
+        const missingHeaders = REQUIRED_HEADERS$3.filter(
           (header) => headerMap[header] === void 0
         );
         if (missingHeaders.length > 0) {
@@ -4912,7 +4910,7 @@ function assignRef(ref, value) {
     return ref;
 }
 
-const {useState: useState$6} = await importShared('react');
+const {useState: useState$7} = await importShared('react');
 
 /**
  * creates a MutableRef with ref change callback
@@ -4929,7 +4927,7 @@ const {useState: useState$6} = await importShared('react');
  * @returns {MutableRefObject}
  */
 function useCallbackRef(initialValue, callback) {
-    var ref = useState$6(function () { return ({
+    var ref = useState$7(function () { return ({
         // value
         value: initialValue,
         // last callback
@@ -9820,7 +9818,7 @@ function SelectScrollDownButton({
 }
 
 const React$5 = await importShared('react');
-const {useEffect: useEffect$2,useState: useState$5} = React$5;
+const {useEffect: useEffect$2,useState: useState$6} = React$5;
 const getTabConfig = () => [
   {
     id: "users",
@@ -9851,16 +9849,21 @@ const getTabConfig = () => [
     id: "product-knowledge",
     label: "Product Knowledge",
     path: "/admin/import/product-knowledge"
+  },
+  {
+    id: "specimen-definitions",
+    label: "Specimen Definitions",
+    path: "/admin/import/specimen-definitions"
   }
 ];
 function ImportsLayout({
   activeTab,
   children
 }) {
-  const [facilities, setFacilities] = useState$5([]);
-  const [loadingFacilities, setLoadingFacilities] = useState$5(true);
-  const [facilityError, setFacilityError] = useState$5(null);
-  const [selectedFacilityId, setSelectedFacilityId] = useState$5("");
+  const [facilities, setFacilities] = useState$6([]);
+  const [loadingFacilities, setLoadingFacilities] = useState$6(true);
+  const [facilityError, setFacilityError] = useState$6(null);
+  const [selectedFacilityId, setSelectedFacilityId] = useState$6("");
   useEffect$2(() => {
     let active = true;
     const loadFacilities = async () => {
@@ -10802,7 +10805,7 @@ function Skeleton({
   );
 }
 
-const {useEffect: useEffect$1,useMemo: useMemo$3,useState: useState$4} = await importShared('react');
+const {useEffect: useEffect$1,useMemo: useMemo$4,useState: useState$5} = await importShared('react');
 const ROOT_PARENT = "__root__";
 const buildOrganizationIndex = (organizations) => {
   const byParentId = /* @__PURE__ */ new Map();
@@ -10817,7 +10820,7 @@ const buildOrganizationIndex = (organizations) => {
   });
   return { byParentId };
 };
-function DepartmentPicker({
+function DepartmentSelect({
   organizations,
   value,
   onChange,
@@ -10825,20 +10828,20 @@ function DepartmentPicker({
   disabled = false,
   placeholder = "Select department"
 }) {
-  const [open, setOpen] = useState$4(false);
-  const [breadcrumbs, setBreadcrumbs] = useState$4(
+  const [open, setOpen] = useState$5(false);
+  const [breadcrumbs, setBreadcrumbs] = useState$5(
     []
   );
-  const [currentParentId, setCurrentParentId] = useState$4(
+  const [currentParentId, setCurrentParentId] = useState$5(
     void 0
   );
-  const [searchQuery, setSearchQuery] = useState$4("");
-  const { byParentId } = useMemo$3(
+  const [searchQuery, setSearchQuery] = useState$5("");
+  const { byParentId } = useMemo$4(
     () => buildOrganizationIndex(organizations),
     [organizations]
   );
   const currentLevel = byParentId.get(currentParentId ?? ROOT_PARENT) ?? [];
-  const filteredDepartments = useMemo$3(() => {
+  const filteredDepartments = useMemo$4(() => {
     if (!searchQuery.trim()) return currentLevel;
     return currentLevel.filter(
       (org) => org.name.toLowerCase().includes(searchQuery.toLowerCase())
@@ -11044,7 +11047,7 @@ function DepartmentPicker({
   );
 }
 
-function RolePicker({
+function RoleSelect({
   roles,
   value,
   onChange,
@@ -11071,7 +11074,7 @@ function RolePicker({
             placeholder: "Search roles",
             value: searchQuery,
             onChange: (event) => onSearchChange(event.target.value),
-            className: "w-full rounded-md border border-gray-200 px-9 py-2 text-sm"
+            className: "w-full rounded-md border border-gray-200 py-2 pl-10 pr-3 text-sm"
           }
         )
       ] }) }),
@@ -11080,21 +11083,15 @@ function RolePicker({
   ] });
 }
 
-const {useCallback: useCallback$1,useEffect,useMemo: useMemo$2,useState: useState$3} = await importShared('react');
-
 const {useMutation,useQuery} = await importShared('@tanstack/react-query');
-const UUID_PATTERN = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-5][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}$/;
+const {useCallback: useCallback$1,useEffect,useMemo: useMemo$3,useState: useState$4} = await importShared('react');
 const normalizeHeader$2 = (value) => value.toLowerCase().replace(/[^a-z0-9]/g, "");
 const buildHeaderMap$1 = (headers) => {
   const headerMap = {
-    user_id: void 0,
     username: void 0
   };
   headers.forEach((header, index) => {
     const normalized = normalizeHeader$2(header);
-    if (normalized === "userid" || normalized === "user_id") {
-      headerMap.user_id = index;
-    }
     if (normalized === "username" || normalized === "user_name") {
       headerMap.username = index;
     }
@@ -11102,23 +11099,23 @@ const buildHeaderMap$1 = (headers) => {
   return headerMap;
 };
 function LinkUsersImport({ facilityId }) {
-  const [currentStep, setCurrentStep] = useState$3("upload");
-  const [uploadError, setUploadError] = useState$3("");
-  const [rows, setRows] = useState$3([]);
-  const [resolveProgress, setResolveProgress] = useState$3(0);
-  const [roles, setRoles] = useState$3([]);
-  const [roleQuery, setRoleQuery] = useState$3("");
-  const [selectedRoleId, setSelectedRoleId] = useState$3("");
-  const [organizations, setOrganizations] = useState$3([]);
-  const [selectedOrg, setSelectedOrg] = useState$3(null);
-  const [importProgress, setImportProgress] = useState$3(0);
-  const [importTotal, setImportTotal] = useState$3(0);
-  const [importProcessed, setImportProcessed] = useState$3(0);
-  const readyCount = useMemo$2(
+  const [currentStep, setCurrentStep] = useState$4("upload");
+  const [uploadError, setUploadError] = useState$4("");
+  const [rows, setRows] = useState$4([]);
+  const [resolveProgress, setResolveProgress] = useState$4(0);
+  const [roles, setRoles] = useState$4([]);
+  const [roleQuery, setRoleQuery] = useState$4("");
+  const [selectedRoleId, setSelectedRoleId] = useState$4("");
+  const [organizations, setOrganizations] = useState$4([]);
+  const [selectedOrg, setSelectedOrg] = useState$4(null);
+  const [importProgress, setImportProgress] = useState$4(0);
+  const [importTotal, setImportTotal] = useState$4(0);
+  const [importProcessed, setImportProcessed] = useState$4(0);
+  const readyCount = useMemo$3(
     () => rows.filter((row) => row.status === "ready").length,
     [rows]
   );
-  const resultSummary = useMemo$2(
+  const resultSummary = useMemo$3(
     () => ({
       linked: rows.filter((row) => row.status === "linked").length,
       alreadyExists: rows.filter((row) => row.status === "already_exists").length,
@@ -11164,16 +11161,14 @@ function LinkUsersImport({ facilityId }) {
           return;
         }
         const headerMap = buildHeaderMap$1(headers);
-        if (headerMap.user_id === void 0 && headerMap.username === void 0) {
-          setUploadError("CSV must include at least one of: user_id, username");
+        if (headerMap.username === void 0) {
+          setUploadError("CSV must include: username");
           return;
         }
         const parsedRows = rows2.map((row, index) => {
-          const userId = headerMap.user_id !== void 0 ? row[headerMap.user_id]?.trim() : "";
           const username = headerMap.username !== void 0 ? row[headerMap.username]?.trim() : "";
           return {
             rowIndex: index + 2,
-            userId: userId || void 0,
             username: username || void 0,
             status: "pending"
           };
@@ -11195,19 +11190,12 @@ function LinkUsersImport({ facilityId }) {
       for (let index = 0; index < inputRows.length; index++) {
         const row = inputRows[index];
         let updatedRow = { ...row };
-        const hasUserId = Boolean(row.userId);
         const hasUsername = Boolean(row.username);
-        if (!hasUserId && !hasUsername) {
+        if (!hasUsername) {
           updatedRow = {
             ...updatedRow,
             status: "invalid",
-            message: "Missing user_id or username"
-          };
-        } else if (row.userId && UUID_PATTERN.test(row.userId)) {
-          updatedRow = {
-            ...updatedRow,
-            resolvedUserId: row.userId,
-            status: "ready"
+            message: "Missing username"
           };
         } else if (row.username) {
           try {
@@ -11227,12 +11215,6 @@ function LinkUsersImport({ facilityId }) {
               message: "User not found"
             };
           }
-        } else if (row.userId) {
-          updatedRow = {
-            ...updatedRow,
-            status: "invalid",
-            message: "Invalid user_id format"
-          };
         }
         if (updatedRow.resolvedUserId) {
           if (seenUserIds.has(updatedRow.resolvedUserId)) {
@@ -11333,9 +11315,9 @@ function LinkUsersImport({ facilityId }) {
     linkUsersMutation.mutate(rows);
   }, [facilityId, selectedOrg, selectedRoleId, linkUsersMutation, rows]);
   const downloadSample = () => {
-    const sampleCSV = `user_id,username
-,alice
-8f10d57d-2d7e-4682-a361-da47b2edac5a,`;
+    const sampleCSV = `username
+johndon_dhm
+bob_ssmm`;
     const blob = new Blob([sampleCSV], { type: "text/csv" });
     const url = window.URL.createObjectURL(blob);
     const a = document.createElement("a");
@@ -11352,14 +11334,14 @@ function LinkUsersImport({ facilityId }) {
           /* @__PURE__ */ jsxRuntimeExports.jsx(Upload, { className: "h-5 w-5" }),
           "Link Users to Department"
         ] }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(CardDescription, { children: "Select a department and role, then upload a CSV with user_id or username." })
+        /* @__PURE__ */ jsxRuntimeExports.jsx(CardDescription, { children: "Select a department and role, then upload a CSV with username." })
       ] }),
       /* @__PURE__ */ jsxRuntimeExports.jsxs(CardContent, { className: "space-y-6", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "grid gap-4 md:grid-cols-2", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "text-sm font-medium text-gray-700", children: "Department / Sub-Department" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              DepartmentPicker,
+              DepartmentSelect,
               {
                 organizations,
                 value: selectedOrg,
@@ -11371,7 +11353,7 @@ function LinkUsersImport({ facilityId }) {
           /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "space-y-2", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("label", { className: "text-sm font-medium text-gray-700", children: "Role" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(
-              RolePicker,
+              RoleSelect,
               {
                 roles,
                 value: selectedRoleId,
@@ -11401,7 +11383,7 @@ function LinkUsersImport({ facilityId }) {
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-lg font-medium", children: "Click to upload CSV" }),
               /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-500", children: "or drag and drop" })
             ] }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-400", children: "Expected columns: user_id, username" }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-xs text-gray-400", children: "Expected columns: username" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "outline", size: "sm", onClick: downloadSample, children: "Download Sample CSV" })
           ] }) })
         ] }),
@@ -11431,7 +11413,6 @@ function LinkUsersImport({ facilityId }) {
         /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border border-gray-200 rounded-lg overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-80 overflow-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "min-w-full text-sm", children: [
           /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "bg-gray-50 text-left", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Row" }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "User ID" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Username" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Resolved User ID" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-3 py-2", children: "Status" }),
@@ -11439,7 +11420,6 @@ function LinkUsersImport({ facilityId }) {
           ] }) }),
           /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: rows.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { className: "border-t", children: [
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: row.rowIndex }),
-            /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: row.userId ?? "-" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: row.username ?? "-" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2", children: row.resolvedUserId ?? "-" }),
             /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-3 py-2 capitalize", children: row.status }),
@@ -11552,7 +11532,7 @@ const locationApi = {
     path: "/api/v1/facility/{facility_id}/location/"}
 };
 
-const {useCallback,useState: useState$2} = await importShared('react');
+const {useCallback,useState: useState$3} = await importShared('react');
 const LocationFormLabels = {
   bed: "bd",
   building: "bu",
@@ -11617,9 +11597,9 @@ const processRowLocations = (data) => {
   return locations;
 };
 function LocationImport({ facilityId }) {
-  const [processedLocations, setProcessedLocations] = useState$2([]);
-  const [currentStep, setCurrentStep] = useState$2("upload");
-  const [uploadError, setUploadError] = useState$2("");
+  const [processedLocations, setProcessedLocations] = useState$3([]);
+  const [currentStep, setCurrentStep] = useState$3("upload");
+  const [uploadError, setUploadError] = useState$3("");
   const { saveLocations } = useSaveLocations(facilityId ?? "");
   const handleFileUpload = (event) => {
     const file = event.target.files?.[0];
@@ -11753,7 +11733,7 @@ Main Building,building,Main hospital building,Reception,room,Main reception area
 const HierarchicalLocationPreview = ({
   locations
 }) => {
-  const [expandedItems, setExpandedItems] = useState$2(/* @__PURE__ */ new Set());
+  const [expandedItems, setExpandedItems] = useState$3(/* @__PURE__ */ new Set());
   const toggleExpanded = (locationId) => {
     const newExpanded = new Set(expandedItems);
     if (newExpanded.has(locationId)) {
@@ -11936,7 +11916,7 @@ var ProductNameTypes = /* @__PURE__ */ ((ProductNameTypes2) => {
   return ProductNameTypes2;
 })(ProductNameTypes || {});
 
-const {useMemo: useMemo$1,useState: useState$1} = await importShared('react');
+const {useMemo: useMemo$2,useState: useState$2} = await importShared('react');
 const HEADER_MAP = {
   resourceCategory: 0,
   slug: 1,
@@ -11953,7 +11933,7 @@ const HEADER_MAP = {
   alternateNameType: 12,
   alternateNameValue: 13
 };
-const REQUIRED_HEADERS$1 = [
+const REQUIRED_HEADERS$2 = [
   "resourceCategory",
   "name",
   "productType",
@@ -11970,11 +11950,11 @@ const DOSAGE_UNITS_CODES = [
   { system: "http://unitsofmeasure.org", code: "mL", display: "milliliter" },
   { system: "http://unitsofmeasure.org", code: "mg", display: "milligram" },
   { system: "http://unitsofmeasure.org", code: "g", display: "gram" },
-  { system: "http://unitsofmeasure.org", code: "mcg", display: "microgram" },
+  { system: "http://unitsofmeasure.org", code: "ug", display: "microgram" },
   { system: "http://unitsofmeasure.org", code: "L", display: "liter" },
   {
     system: "http://unitsofmeasure.org",
-    code: "IU",
+    code: "[iU]",
     display: "international unit"
   },
   { system: "http://unitsofmeasure.org", code: "{count}", display: "count" },
@@ -11989,11 +11969,11 @@ const parseCsvList = (value) => value ? value.split(",").map((entry) => entry.tr
 function ProductKnowledgeImport({
   facilityId
 }) {
-  const [currentStep, setCurrentStep] = useState$1("upload");
-  const [uploadError, setUploadError] = useState$1("");
-  const [processedRows, setProcessedRows] = useState$1([]);
-  const [results, setResults] = useState$1(null);
-  const summary = useMemo$1(() => {
+  const [currentStep, setCurrentStep] = useState$2("upload");
+  const [uploadError, setUploadError] = useState$2("");
+  const [processedRows, setProcessedRows] = useState$2([]);
+  const [results, setResults] = useState$2(null);
+  const summary = useMemo$2(() => {
     const valid = processedRows.filter((row) => row.errors.length === 0).length;
     const invalid = processedRows.length - valid;
     return { total: processedRows.length, valid, invalid };
@@ -12296,7 +12276,7 @@ Medicines,,Paracetamol,medication,Paracetamol,12345,tablet,Tablet,123456,123456,
     /* @__PURE__ */ jsxRuntimeExports.jsxs(CardContent, { children: [
       results && results.failures.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(Alert, { className: "mb-4", variant: "destructive", children: [
         /* @__PURE__ */ jsxRuntimeExports.jsx(CircleAlert, { className: "h-4 w-4" }),
-        /* @__PURE__ */ jsxRuntimeExports.jsx(AlertDescription, { children: results.failures.slice(0, 5).map((failure) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(AlertDescription, { children: results.failures.map((failure) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
           "Row ",
           failure.rowIndex,
           ": ",
@@ -12308,7 +12288,7 @@ Medicines,,Paracetamol,medication,Paracetamol,12345,tablet,Tablet,123456,123456,
   ] }) });
 }
 function getValidatedDatapoint(datapoint) {
-  if (REQUIRED_HEADERS$1.some((key) => !datapoint[key].trim())) {
+  if (REQUIRED_HEADERS$2.some((key) => !datapoint[key].trim())) {
     throw new Error("Missing required fields");
   }
   const baseUnit = DOSAGE_UNITS_CODES.find(
@@ -12438,6 +12418,461 @@ async function getExistingProductKnowledgeSlugs(facilityId) {
     page++;
   }
   return new Set(results.map((pk) => pk.slug_config.slug_value));
+}
+
+var SpecimenDefinitionStatus = /* @__PURE__ */ ((SpecimenDefinitionStatus2) => {
+  SpecimenDefinitionStatus2["draft"] = "draft";
+  SpecimenDefinitionStatus2["active"] = "active";
+  SpecimenDefinitionStatus2["retired"] = "retired";
+  return SpecimenDefinitionStatus2;
+})(SpecimenDefinitionStatus || {});
+var Preference = /* @__PURE__ */ ((Preference2) => {
+  Preference2["preferred"] = "preferred";
+  Preference2["alternate"] = "alternate";
+  return Preference2;
+})(Preference || {});
+
+const {useMemo: useMemo$1,useState: useState$1} = await importShared('react');
+const REQUIRED_HEADERS$1 = [
+  "title",
+  "description",
+  "type_collected_code",
+  "type_collected_system",
+  "type_collected_display"
+];
+const OPTIONAL_HEADERS$1 = [
+  "patient_preparation_code",
+  "patient_preparation_system",
+  "patient_preparation_display",
+  "collection_code",
+  "collection_system",
+  "collection_display",
+  "preference",
+  "requirement",
+  "single_use",
+  "container_description",
+  "container_capacity_value",
+  "container_capacity_unit_code",
+  "container_capacity_unit_system",
+  "container_capacity_unit_display",
+  "container_minimumvolume_string",
+  "container_cap_code",
+  "container_cap_system",
+  "container_cap_display",
+  "container_minimumvolume",
+  "container_minimumvolume_unit_code",
+  "container_minimumvolume_unit_system",
+  "container_minimumvolume_unit_display",
+  "container_preparation",
+  "retention_time_value",
+  "retention_time_unit_code",
+  "retention_time_unit_system",
+  "retention_time_unit_display"
+];
+const createCode = (code, system, display) => {
+  if (code && system && display) {
+    return { code, system, display };
+  }
+  return void 0;
+};
+function SpecimenDefinitionImport({
+  facilityId
+}) {
+  const [currentStep, setCurrentStep] = useState$1("upload");
+  const [uploadError, setUploadError] = useState$1("");
+  const [processedRows, setProcessedRows] = useState$1([]);
+  const [results, setResults] = useState$1(null);
+  const summary = useMemo$1(() => {
+    const valid = processedRows.filter((row) => row.errors.length === 0).length;
+    const invalid = processedRows.length - valid;
+    return { total: processedRows.length, valid, invalid };
+  }, [processedRows]);
+  const handleFileUpload = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (file.type !== "text/csv" && !file.name.endsWith(".csv")) {
+      setUploadError("Please upload a valid CSV file");
+      return;
+    }
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const csvText = e.target?.result;
+        const { headers, rows } = parseCsvText(csvText);
+        if (headers.length === 0) {
+          setUploadError("CSV is empty or missing headers");
+          return;
+        }
+        const headerMap = headers.reduce(
+          (acc, header, index) => {
+            const key = header.trim();
+            acc[key] = index;
+            return acc;
+          },
+          {}
+        );
+        const missingHeaders = REQUIRED_HEADERS$1.filter(
+          (header) => headerMap[header] === void 0
+        );
+        if (missingHeaders.length > 0) {
+          setUploadError(
+            `Missing required headers: ${missingHeaders.join(", ")}`
+          );
+          return;
+        }
+        const processed = rows.map((row, index) => {
+          const data = {
+            title: row[headerMap.title] ?? "",
+            description: headerMap.description !== void 0 ? row[headerMap.description] : void 0,
+            status: "active",
+            patient_preparation_code: headerMap.patient_preparation_code !== void 0 ? row[headerMap.patient_preparation_code] : void 0,
+            patient_preparation_system: headerMap.patient_preparation_system !== void 0 ? row[headerMap.patient_preparation_system] : void 0,
+            patient_preparation_display: headerMap.patient_preparation_display !== void 0 ? row[headerMap.patient_preparation_display] : void 0,
+            collection_code: headerMap.collection_code !== void 0 ? row[headerMap.collection_code] : void 0,
+            collection_system: headerMap.collection_system !== void 0 ? row[headerMap.collection_system] : void 0,
+            collection_display: headerMap.collection_display !== void 0 ? row[headerMap.collection_display] : void 0,
+            type_collected_code: row[headerMap.type_collected_code] ?? "",
+            type_collected_system: row[headerMap.type_collected_system] ?? "",
+            type_collected_display: row[headerMap.type_collected_display] ?? "",
+            preference: headerMap.preference !== void 0 ? row[headerMap.preference] : void 0,
+            requirement: headerMap.requirement !== void 0 ? row[headerMap.requirement] : void 0,
+            single_use: headerMap.single_use !== void 0 ? row[headerMap.single_use] : void 0,
+            container_description: headerMap.container_description !== void 0 ? row[headerMap.container_description] : void 0,
+            container_capacity_value: headerMap.container_capacity_value !== void 0 ? row[headerMap.container_capacity_value] : void 0,
+            container_capacity_unit_code: headerMap.container_capacity_unit_code !== void 0 ? row[headerMap.container_capacity_unit_code] : void 0,
+            container_capacity_unit_system: headerMap.container_capacity_unit_system !== void 0 ? row[headerMap.container_capacity_unit_system] : void 0,
+            container_capacity_unit_display: headerMap.container_capacity_unit_display !== void 0 ? row[headerMap.container_capacity_unit_display] : void 0,
+            container_minimumvolume_string: headerMap.container_minimumvolume_string !== void 0 ? row[headerMap.container_minimumvolume_string] : void 0,
+            container_cap_code: headerMap.container_cap_code !== void 0 ? row[headerMap.container_cap_code] : void 0,
+            container_cap_system: headerMap.container_cap_system !== void 0 ? row[headerMap.container_cap_system] : void 0,
+            container_cap_display: headerMap.container_cap_display !== void 0 ? row[headerMap.container_cap_display] : void 0,
+            container_minimumvolume: headerMap.container_minimumvolume !== void 0 ? row[headerMap.container_minimumvolume] : void 0,
+            container_minimumvolume_unit_code: headerMap.container_minimumvolume_unit_code !== void 0 ? row[headerMap.container_minimumvolume_unit_code] : void 0,
+            container_minimumvolume_unit_system: headerMap.container_minimumvolume_unit_system !== void 0 ? row[headerMap.container_minimumvolume_unit_system] : void 0,
+            container_minimumvolume_unit_display: headerMap.container_minimumvolume_unit_display !== void 0 ? row[headerMap.container_minimumvolume_unit_display] : void 0,
+            container_preparation: headerMap.container_preparation !== void 0 ? row[headerMap.container_preparation] : void 0,
+            retention_time_value: headerMap.retention_time_value !== void 0 ? row[headerMap.retention_time_value] : void 0,
+            retention_time_unit_code: headerMap.retention_time_unit_code !== void 0 ? row[headerMap.retention_time_unit_code] : void 0,
+            retention_time_unit_system: headerMap.retention_time_unit_system !== void 0 ? row[headerMap.retention_time_unit_system] : void 0,
+            retention_time_unit_display: headerMap.retention_time_unit_display !== void 0 ? row[headerMap.retention_time_unit_display] : void 0
+          };
+          const errors = [];
+          if (!data.title.trim()) errors.push("Missing title");
+          if (!data.type_collected_code.trim())
+            errors.push("Missing type_collected_code");
+          if (!data.type_collected_system.trim())
+            errors.push("Missing type_collected_system");
+          if (!data.type_collected_display.trim())
+            errors.push("Missing type_collected_display");
+          return {
+            rowIndex: index + 2,
+            data,
+            errors
+          };
+        });
+        setUploadError("");
+        setProcessedRows(processed);
+        setCurrentStep("review");
+      } catch (error) {
+        setUploadError("Error processing CSV file");
+      }
+    };
+    reader.readAsText(file);
+  };
+  const downloadSample = () => {
+    const sampleCSV = `title,description,patient_preparation_code,patient_preparation_system,patient_preparation_display,collection_code,collection_system,collection_display,type_collected_code,type_collected_system,type_collected_display,preference,requirement,single_use,container_description,container_capacity_value,container_capacity_unit_code,container_capacity_unit_system,container_capacity_unit_display,container_minimumvolume_string,container_cap_code,container_cap_system,container_cap_display,container_minimumvolume,container_minimumvolume_unit_code,container_minimumvolume_unit_system,container_minimumvolume_unit_display,container_preparation,retention_time_value,retention_time_unit_code,retention_time_unit_system,retention_time_unit_display
+Blood collection,Description,,,,129300006,http://snomed.info/sct,Puncture - action,WB,http://terminology.hl7.org/CodeSystem/v2-0487,"Blood, Whole",preferred,Requirement,true,Container Description,5.00,mL,http://unitsofmeasure.org,milliliter,12,black,http://terminology.hl7.org/CodeSystem/container-cap,black cap,,,,,Preparation,24.00,h,http://unitsofmeasure.org,hours`;
+    const blob = new Blob([sampleCSV], { type: "text/csv" });
+    const url = window.URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = "sample_specimen_definition.csv";
+    a.click();
+    window.URL.revokeObjectURL(url);
+  };
+  const runImport = async () => {
+    const validRows = processedRows.filter((row) => row.errors.length === 0);
+    if (validRows.length === 0) {
+      setResults({
+        processed: 0,
+        created: 0,
+        failed: 0,
+        failures: []
+      });
+      setCurrentStep("done");
+      return;
+    }
+    setCurrentStep("importing");
+    setResults({
+      processed: 0,
+      created: 0,
+      failed: 0,
+      failures: []
+    });
+    if (!facilityId) return;
+    for (const row of validRows) {
+      try {
+        const slug = await createSlug(row.data.title);
+        const typeCollected = createCode(
+          row.data.type_collected_code,
+          row.data.type_collected_system,
+          row.data.type_collected_display
+        );
+        if (!typeCollected) {
+          throw new Error("Missing type_collected information");
+        }
+        const containerCap = createCode(
+          row.data.container_cap_code,
+          row.data.container_cap_system,
+          row.data.container_cap_display
+        );
+        const patientPreparation = createCode(
+          row.data.patient_preparation_code,
+          row.data.patient_preparation_system,
+          row.data.patient_preparation_display
+        );
+        const collection = createCode(
+          row.data.collection_code,
+          row.data.collection_system,
+          row.data.collection_display
+        );
+        const containerCapacityUnit = createCode(
+          row.data.container_capacity_unit_code,
+          row.data.container_capacity_unit_system,
+          row.data.container_capacity_unit_display
+        );
+        const containerCapacityValue = row.data.container_capacity_value ? parseFloat(row.data.container_capacity_value) : 0;
+        const minimumVolumeUnit = createCode(
+          row.data.container_minimumvolume_unit_code,
+          row.data.container_minimumvolume_unit_system,
+          row.data.container_minimumvolume_unit_display
+        );
+        const minimumVolumeValue = row.data.container_minimumvolume ? parseFloat(row.data.container_minimumvolume) : 0;
+        const containerMinimumVolume = row.data.container_minimumvolume_string ? { string: row.data.container_minimumvolume_string } : minimumVolumeUnit && minimumVolumeValue > 0 ? {
+          quantity: {
+            value: minimumVolumeValue.toString(),
+            unit: minimumVolumeUnit
+          }
+        } : void 0;
+        const container = containerCap || containerMinimumVolume || row.data.container_description || row.data.container_preparation || containerCapacityUnit && containerCapacityValue > 0 ? {
+          ...row.data.container_description && {
+            description: row.data.container_description
+          },
+          ...containerCapacityUnit && containerCapacityValue > 0 ? {
+            capacity: {
+              value: containerCapacityValue.toString(),
+              unit: containerCapacityUnit
+            }
+          } : {},
+          ...containerMinimumVolume && {
+            minimum_volume: containerMinimumVolume
+          },
+          ...containerCap && { cap: containerCap },
+          ...row.data.container_preparation && {
+            preparation: row.data.container_preparation
+          }
+        } : void 0;
+        const retentionTimeUnit = createCode(
+          row.data.retention_time_unit_code,
+          row.data.retention_time_unit_system,
+          row.data.retention_time_unit_display
+        );
+        const typeTested = {
+          is_derived: false,
+          preference: row.data.preference || Preference.preferred,
+          ...container && { container },
+          ...row.data.requirement && { requirement: row.data.requirement },
+          retention_time: {
+            value: row.data.retention_time_value || "24",
+            unit: retentionTimeUnit || createCode("h", "http://unitsofmeasure.org", "hours")
+          },
+          single_use: row.data.single_use !== void 0 ? row.data.single_use.toLowerCase() === "true" : true
+        };
+        const payload = {
+          title: row.data.title,
+          slug_value: slug,
+          status: row.data.status || SpecimenDefinitionStatus.active,
+          description: row.data.description ?? "",
+          type_collected: typeCollected,
+          patient_preparation: patientPreparation ? [patientPreparation] : [],
+          ...collection && { collection },
+          type_tested: typeTested
+        };
+        await request(`/api/v1/facility/${facilityId}/specimen_definition/`, {
+          method: "POST",
+          body: JSON.stringify(payload)
+        });
+        setResults(
+          (prev) => prev ? {
+            ...prev,
+            processed: prev.processed + 1,
+            created: prev.created + 1
+          } : prev
+        );
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : "Unknown error";
+        setResults(
+          (prev) => prev ? {
+            ...prev,
+            processed: prev.processed + 1,
+            failed: prev.failed + 1,
+            failures: [
+              ...prev.failures,
+              { rowIndex: row.rowIndex, title: row.data.title, reason }
+            ]
+          } : prev
+        );
+      }
+    }
+    setCurrentStep("done");
+  };
+  if (currentStep === "upload") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-4xl mx-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(CardHeader, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs(CardTitle, { className: "flex items-center gap-2", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(Upload, { className: "h-5 w-5" }),
+          "Import Specimen Definitions from CSV"
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(CardDescription, { children: "Upload a CSV file to import specimen definitions." })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(CardContent, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "border-2 border-dashed border-gray-300 rounded-lg p-8 text-center", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "input",
+            {
+              type: "file",
+              accept: ".csv",
+              onChange: handleFileUpload,
+              className: "hidden",
+              id: "specimen-definition-upload"
+            }
+          ),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(
+            "label",
+            {
+              htmlFor: "specimen-definition-upload",
+              className: "cursor-pointer",
+              children: /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { className: "flex flex-col items-center gap-4", children: [
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Upload, { className: "h-12 w-12 text-gray-400" }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-lg font-medium", children: "Click to upload CSV file" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("p", { className: "text-sm text-gray-500", children: "or drag and drop" })
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-gray-400", children: [
+                  "Expected columns: ",
+                  REQUIRED_HEADERS$1.join(", "),
+                  "."
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsxs("p", { className: "text-xs text-gray-400", children: [
+                  "Optional columns: ",
+                  OPTIONAL_HEADERS$1.join(", "),
+                  "."
+                ] }),
+                /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "outline", size: "sm", onClick: downloadSample, children: "Download Sample CSV" })
+              ] })
+            }
+          )
+        ] }),
+        uploadError && /* @__PURE__ */ jsxRuntimeExports.jsxs(Alert, { className: "mt-4", variant: "destructive", children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx(CircleAlert, { className: "h-4 w-4" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx(AlertDescription, { children: uploadError })
+        ] })
+      ] })
+    ] }) });
+  }
+  if (currentStep === "review") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-7xl mx-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(CardHeader, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(CardTitle, { children: "Specimen Definition Import Wizard" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(CardDescription, { children: "Review and validate specimen definitions before importing." }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Progress, { value: 100, className: "h-2" }) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(CardContent, { children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          /* @__PURE__ */ jsxRuntimeExports.jsx("h3", { className: "text-lg font-semibold mb-4", children: "Review All Specimen Definitions" }),
+          /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "border border-gray-200 rounded-lg overflow-hidden", children: /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-h-80 overflow-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("table", { className: "min-w-full text-sm", children: [
+            /* @__PURE__ */ jsxRuntimeExports.jsx("thead", { className: "bg-gray-50 text-gray-600", children: /* @__PURE__ */ jsxRuntimeExports.jsxs("tr", { children: [
+              /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-4 py-2 text-left", children: "Row" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-4 py-2 text-left", children: "Title" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-4 py-2 text-left", children: "Type Collected" }),
+              /* @__PURE__ */ jsxRuntimeExports.jsx("th", { className: "px-4 py-2 text-left", children: "Status" })
+            ] }) }),
+            /* @__PURE__ */ jsxRuntimeExports.jsx("tbody", { children: processedRows.map((row) => /* @__PURE__ */ jsxRuntimeExports.jsxs(
+              "tr",
+              {
+                className: "border-t border-gray-100",
+                children: [
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2 text-gray-500", children: row.rowIndex }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2", children: row.data.title }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2", children: row.data.type_collected_display || "-" }),
+                  /* @__PURE__ */ jsxRuntimeExports.jsx("td", { className: "px-4 py-2", children: row.errors.length === 0 ? /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-green-600", children: "Valid" }) : /* @__PURE__ */ jsxRuntimeExports.jsx("span", { className: "text-red-600", children: row.errors.join("; ") }) })
+                ]
+              },
+              row.rowIndex
+            )) })
+          ] }) }) })
+        ] }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex justify-end", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Button,
+          {
+            className: "mt-4",
+            onClick: runImport,
+            disabled: summary.valid === 0,
+            children: "Start Import"
+          }
+        ) }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+          Button,
+          {
+            variant: "outline",
+            onClick: () => setCurrentStep("upload"),
+            children: "Back"
+          }
+        ) })
+      ] })
+    ] }) });
+  }
+  if (currentStep === "importing") {
+    return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-4xl mx-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Card, { children: /* @__PURE__ */ jsxRuntimeExports.jsxs(CardHeader, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CardTitle, { children: "Importing Specimen Definitions" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(CardDescription, { children: [
+        results?.processed ?? 0,
+        "/",
+        summary.valid,
+        " processed"
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "mt-4", children: /* @__PURE__ */ jsxRuntimeExports.jsx(
+        Progress,
+        {
+          value: summary.valid ? (results?.processed ?? 0) / summary.valid * 100 : 0,
+          className: "h-2"
+        }
+      ) })
+    ] }) }) });
+  }
+  return /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "max-w-4xl mx-auto", children: /* @__PURE__ */ jsxRuntimeExports.jsxs(Card, { children: [
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(CardHeader, { children: [
+      /* @__PURE__ */ jsxRuntimeExports.jsx(CardTitle, { children: "Specimen Definition Import Complete" }),
+      /* @__PURE__ */ jsxRuntimeExports.jsxs(CardDescription, { children: [
+        "Created: ",
+        results?.created ?? 0,
+        " · Failed: ",
+        results?.failed ?? 0
+      ] })
+    ] }),
+    /* @__PURE__ */ jsxRuntimeExports.jsxs(CardContent, { children: [
+      results && results.failures.length > 0 && /* @__PURE__ */ jsxRuntimeExports.jsxs(Alert, { className: "mb-4", variant: "destructive", children: [
+        /* @__PURE__ */ jsxRuntimeExports.jsx(CircleAlert, { className: "h-4 w-4" }),
+        /* @__PURE__ */ jsxRuntimeExports.jsx(AlertDescription, { children: results.failures.slice(0, 5).map((failure) => /* @__PURE__ */ jsxRuntimeExports.jsxs("div", { children: [
+          "Row ",
+          failure.rowIndex,
+          ": ",
+          failure.reason
+        ] }, `${failure.rowIndex}-${failure.title}`)) })
+      ] }),
+      /* @__PURE__ */ jsxRuntimeExports.jsx("div", { className: "flex flex-wrap gap-2", children: /* @__PURE__ */ jsxRuntimeExports.jsx(Button, { variant: "outline", onClick: () => setCurrentStep("upload"), children: "Import Another File" }) })
+    ] })
+  ] }) });
 }
 
 const REQUIRED_HEADERS = [
@@ -12852,7 +13287,8 @@ const routes = {
   "/admin/import/link-users": () => renderImportsPage("link-users", /* @__PURE__ */ jsxRuntimeExports.jsx(LinkUsersImport, {})),
   "/admin/import/locations": () => renderImportsPage("locations", /* @__PURE__ */ jsxRuntimeExports.jsx(LocationImport, {})),
   "/admin/import/charge-item-definition": () => renderImportsPage("charge-item-definition", /* @__PURE__ */ jsxRuntimeExports.jsx(ChargeItemDefinitionImport, {})),
-  "/admin/import/product-knowledge": () => renderImportsPage("product-knowledge", /* @__PURE__ */ jsxRuntimeExports.jsx(ProductKnowledgeImport, {}))
+  "/admin/import/product-knowledge": () => renderImportsPage("product-knowledge", /* @__PURE__ */ jsxRuntimeExports.jsx(ProductKnowledgeImport, {})),
+  "/admin/import/specimen-definitions": () => renderImportsPage("specimen-definitions", /* @__PURE__ */ jsxRuntimeExports.jsx(SpecimenDefinitionImport, {}))
 };
 
 const React = await importShared('react');

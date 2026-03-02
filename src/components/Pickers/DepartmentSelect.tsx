@@ -40,7 +40,7 @@ export interface FacilityOrganizationRead {
   has_children?: boolean;
 }
 
-interface DepartmentPickerProps {
+interface DepartmentSelectProps {
   organizations: FacilityOrganizationRead[];
   value: FacilityOrganizationRead | null;
   onChange: (org: FacilityOrganizationRead | null) => void;
@@ -68,14 +68,14 @@ const buildOrganizationIndex = (organizations: FacilityOrganizationRead[]) => {
   return { byParentId };
 };
 
-export default function DepartmentPicker({
+export default function DepartmentSelect({
   organizations,
   value,
   onChange,
   isLoading = false,
   disabled = false,
   placeholder = "Select department",
-}: DepartmentPickerProps) {
+}: DepartmentSelectProps) {
   const [open, setOpen] = useState(false);
   const [breadcrumbs, setBreadcrumbs] = useState<FacilityOrganizationRead[]>(
     [],

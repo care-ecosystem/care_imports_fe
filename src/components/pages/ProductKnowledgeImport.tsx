@@ -67,11 +67,11 @@ const DOSAGE_UNITS_CODES = [
   { system: "http://unitsofmeasure.org", code: "mL", display: "milliliter" },
   { system: "http://unitsofmeasure.org", code: "mg", display: "milligram" },
   { system: "http://unitsofmeasure.org", code: "g", display: "gram" },
-  { system: "http://unitsofmeasure.org", code: "mcg", display: "microgram" },
+  { system: "http://unitsofmeasure.org", code: "ug", display: "microgram" },
   { system: "http://unitsofmeasure.org", code: "L", display: "liter" },
   {
     system: "http://unitsofmeasure.org",
-    code: "IU",
+    code: "[iU]",
     display: "international unit",
   },
   { system: "http://unitsofmeasure.org", code: "{count}", display: "count" },
@@ -247,7 +247,7 @@ Medicines,,Paracetamol,medication,Paracetamol,12345,tablet,Tablet,123456,123456,
         product_type: datapoint.productType,
         status: ProductKnowledgeStatus.active,
         base_unit: datapoint.baseUnit,
-  category: `f-${facilityId}-pk-${await createSlug(datapoint.resourceCategory)}`,
+        category: `f-${facilityId}-pk-${await createSlug(datapoint.resourceCategory)}`,
         names: [],
         storage_guidelines: [],
         is_instance_level: false,
@@ -501,7 +501,7 @@ Medicines,,Paracetamol,medication,Paracetamol,12345,tablet,Tablet,123456,123456,
             <Alert className="mb-4" variant="destructive">
               <AlertCircle className="h-4 w-4" />
               <AlertDescription>
-                {results.failures.slice(0, 5).map((failure) => (
+                {results.failures.map((failure) => (
                   <div key={`${failure.rowIndex}-${failure.name}`}>
                     Row {failure.rowIndex}: {failure.reason}
                   </div>

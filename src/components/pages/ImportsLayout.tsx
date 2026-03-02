@@ -16,7 +16,8 @@ export type ImportTabId =
   | "link-users"
   | "locations"
   | "charge-item-definition"
-  | "product-knowledge";
+  | "product-knowledge"
+  | "specimen-definitions";
 
 interface ImportsLayoutProps {
   activeTab: ImportTabId;
@@ -62,6 +63,11 @@ const getTabConfig = () => [
     id: "product-knowledge" as const,
     label: "Product Knowledge",
     path: "/admin/import/product-knowledge",
+  },
+  {
+    id: "specimen-definitions" as const,
+    label: "Specimen Definitions",
+    path: "/admin/import/specimen-definitions",
   },
 ];
 

@@ -2,7 +2,7 @@ const currentImports = {};
       const exportSet = new Set(['Module', '__esModule', 'default', '_export_sfc']);
       let moduleMap = {
 "./manifest":()=>{
-      dynamicLoadingCss(["style-DrBaCYY5.css"], false, './manifest');
+      dynamicLoadingCss(["style-B4i9s24z.css"], false, './manifest');
       return __federation_import('./__federation_expose_Manifest.js').then(module =>Object.keys(module).every(item => exportSet.has(item)) ? () => module.default : () => module)},};
       const seen = {};
       const dynamicLoadingCss = (cssFilePaths, dontAppendStylesToHead, exposeItemName) => {
