@@ -145,7 +145,7 @@ const validateQualifiedRanges = (
     }
 
     const conditions = range.conditions;
-    if (!Array.isArray(conditions) || conditions.length === 0) {
+    if (!Array.isArray(conditions)) {
       errors.push(`${indexLabel} must include conditions array`);
     } else {
       conditions.forEach((condition, conditionIndex) => {
