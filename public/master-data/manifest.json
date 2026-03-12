@@ -1,0 +1,7 @@
+{
+  "basePath": "/master-data/",
+  "product-knowledge": "product_knowledge.csv",
+  "specimen-definition": "specimen_definition.csv",
+  "observation-definition": "observation_definition.csv",
+  "activity-definition": "activity_definition.csv"
+}

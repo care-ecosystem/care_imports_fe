@@ -11,7 +11,10 @@ import {
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
 import { ResourceCategoryResourceType } from "@/types/base/resourceCategory/resourceCategory";
-import { parseCsvText } from "@/utils/csv";
+import {
+  parseActivityDefinitionCsv,
+  type ActivityDefinitionProcessedRow,
+} from "@/utils/masterImport/activityDefinition";
 import { upsertResourceCategories } from "@/utils/resourceCategory";
 import { createSlug } from "@/utils/slug";
 import { AlertCircle, CheckCircle2, Upload } from "lucide-react";
@@ -20,32 +23,6 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 interface ActivityDefinitionImportProps {
   facilityId?: string;
 }
-
-type CodePayload = {
-  system: string;
-  code: string;
-  display: string;
-};
-
-type ActivityRow = {
-  title: string;
-  slug_value?: string;
-  description: string;
-  usage: string;
-  status: string;
-  classification: string;
-  kind: string;
-  code: CodePayload;
-  body_site: CodePayload | null;
-  diagnostic_report_codes: CodePayload[];
-  derived_from_uri?: string;
-  category_name: string;
-  specimen_names: string[];
-  observation_names: string[];
-  charge_item_names: string[];
-  location_names: string[];
-  healthcare_service_name?: string;
-};
 
 interface ResolvedRow {
   categorySlug?: string;
@@ -56,12 +33,9 @@ interface ResolvedRow {
   healthcareServiceId?: string | null;
 }
 
-interface ProcessedRow {
-  rowIndex: number;
-  data: ActivityRow;
-  errors: string[];
+type ProcessedRow = ActivityDefinitionProcessedRow & {
   resolved?: ResolvedRow;
-}
+};
 
 interface ImportResults {
   processed: number;
@@ -77,74 +51,7 @@ interface PaginatedResponse<T> {
   count?: number;
 }
 
-const REQUIRED_HEADERS = [
-  "title",
-  "description",
-  "usage",
-  "status",
-  "classification",
-  "category_name",
-  "code_system",
-  "code_value",
-  "code_display",
-] as const;
-
-const ACTIVITY_STATUSES = ["draft", "active", "retired", "unknown"] as const;
-const ACTIVITY_CLASSIFICATIONS = [
-  "laboratory",
-  "imaging",
-  "surgical_procedure",
-  "counselling",
-] as const;
-const ACTIVITY_KIND = "service_request";
-
-const normalizeHeader = (header: string) =>
-  header.toLowerCase().replace(/[^a-z0-9]/g, "");
-
 const normalizeName = (value: string) => value.trim().toLowerCase();
-
-const splitCellValues = (value?: string) =>
-  (value ?? "")
-    .split(",")
-    .map((item) => item.trim())
-    .filter(Boolean);
-
-const isNonEmptyString = (value: unknown) =>
-  typeof value === "string" && value.trim().length > 0;
-
-const buildOptionalCode = (
-  system: string | undefined,
-  code: string | undefined,
-  display: string | undefined,
-  errors: string[],
-  label: string,
-  defaultSystem?: string,
-) => {
-  const trimmedCode = code?.trim();
-  const trimmedDisplay = display?.trim();
-  if (!trimmedCode && !trimmedDisplay) {
-    return null;
-  }
-  if (!trimmedCode || !trimmedDisplay) {
-    errors.push(`${label} requires both code and display if provided`);
-    return null;
-  }
-  const resolvedSystem = system?.trim() || defaultSystem;
-  if (!resolvedSystem) {
-    errors.push(`${label} requires system if provided`);
-    return null;
-  }
-  return { system: resolvedSystem, code: trimmedCode, display: trimmedDisplay };
-};
-
-const getCellValue = (
-  row: string[],
-  headerMap: Record<string, number>,
-  key: string,
-) => {
-  const index = headerMap[normalizeHeader(key)];
-  return index === undefined ? "" : (row[index] ?? "");
-};
 
 const csvEscape = (value: string) => `"${value.replace(/"/g, '""')}"`;
 
@@ -484,158 +391,7 @@ export default function ActivityDefinitionImport({
     reader.onload = (e) => {
       try {
         const csvText = e.target?.result as string;
-        const { headers, rows } = parseCsvText(csvText);
-
-        if (headers.length === 0) {
-          setUploadError("CSV is empty or missing headers");
-          return;
-        }
-
-        const headerMap = headers.reduce<Record<string, number>>(
-          (acc, header, index) => {
-            acc[normalizeHeader(header)] = index;
-            return acc;
-          },
-          {},
-        );
-
-        const missingHeaders = REQUIRED_HEADERS.filter(
-          (header) => headerMap[normalizeHeader(header)] === undefined,
-        );
-
-        if (missingHeaders.length > 0) {
-          setUploadError(
-            `Missing required headers: ${missingHeaders.join(", ")}`,
-          );
-          return;
-        }
-
-        const processed = rows.map((row, index) => {
-          const errors: string[] = [];
-          const title = getCellValue(row, headerMap, "title").trim();
-          const description = getCellValue(
-            row,
-            headerMap,
-            "description",
-          ).trim();
-          const usage = getCellValue(row, headerMap, "usage").trim();
-          const status = getCellValue(row, headerMap, "status").trim();
-          const classification = getCellValue(
-            row,
-            headerMap,
-            "classification",
-          ).trim();
-          const categoryName = getCellValue(
-            row,
-            headerMap,
-            "category_name",
-          ).trim();
-          const codeSystem = getCellValue(row, headerMap, "code_system").trim();
-          const codeValue = getCellValue(row, headerMap, "code_value").trim();
-          const codeDisplay = getCellValue(
-            row,
-            headerMap,
-            "code_display",
-          ).trim();
-
-          if (!title) errors.push("Missing title");
-          if (!description) errors.push("Missing description");
-          if (!usage) errors.push("Missing usage");
-          if (!categoryName) errors.push("Missing category name");
-          if (!codeValue || !codeDisplay) {
-            errors.push("Missing code value/display");
-          }
-
-          const resolvedStatus = status || "active";
-          if (!ACTIVITY_STATUSES.includes(resolvedStatus as never)) {
-            errors.push("Invalid status value");
-          }
-
-          const resolvedClassification = classification || "laboratory";
-          if (
-            !ACTIVITY_CLASSIFICATIONS.includes(resolvedClassification as never)
-          ) {
-            errors.push("Invalid classification value");
-          }
-
-          const resolvedCodeSystem =
-            codeSystem.trim() || "http://snomed.info/sct";
-
-          const bodySite = buildOptionalCode(
-            getCellValue(row, headerMap, "body_site_system").trim(),
-            getCellValue(row, headerMap, "body_site_code").trim(),
-            getCellValue(row, headerMap, "body_site_display").trim(),
-            errors,
-            "Body site",
-          );
-
-          const diagnosticRaw = getCellValue(
-            row,
-            headerMap,
-            "diagnostic_report_codes",
-          ).trim();
-          const diagnosticReportCodes = diagnosticRaw
-            ? diagnosticRaw
-                .split(",")
-                .map((code) => code.trim())
-                .filter(Boolean)
-                .map((code) => ({
-                  system: "http://loinc.org",
-                  code,
-                  display: code,
-                }))
-            : [];
-
-          const data: ActivityRow = {
-            title,
-            slug_value: getCellValue(row, headerMap, "slug_value").trim(),
-            description,
-            usage,
-            status: resolvedStatus,
-            classification: resolvedClassification,
-            kind: getCellValue(row, headerMap, "kind").trim() || ACTIVITY_KIND,
-            code: {
-              system: resolvedCodeSystem,
-              code: codeValue,
-              display: codeDisplay,
-            },
-            body_site: bodySite,
-            diagnostic_report_codes: diagnosticReportCodes,
-            derived_from_uri: getCellValue(
-              row,
-              headerMap,
-              "derived_from_uri",
-            ).trim(),
-            category_name: categoryName,
-            specimen_names: splitCellValues(
-              getCellValue(row, headerMap, "specimen_names").trim(),
-            ),
-            observation_names: splitCellValues(
-              getCellValue(row, headerMap, "observation_names").trim(),
-            ),
-            charge_item_names: splitCellValues(
-              getCellValue(row, headerMap, "charge_item_names").trim(),
-            ),
-            location_names: splitCellValues(
-              getCellValue(row, headerMap, "location_names").trim(),
-            ),
-            healthcare_service_name: getCellValue(
-              row,
-              headerMap,
-              "healthcare_service_name",
-            ).trim(),
-          };
-
-          if (!isNonEmptyString(data.kind)) {
-            errors.push("Missing kind");
-          }
-
-          return {
-            rowIndex: index + 2,
-            data,
-            errors,
-          };
-        });
+        const processed = parseActivityDefinitionCsv(csvText);
 
         setUploadError("");
         setUploadedFileName(file.name);
@@ -664,7 +420,9 @@ export default function ActivityDefinitionImport({
       "code_system",
       "code_value",
       "code_display",
-      "diagnostic_report_codes",
+      "diagnostic_report_system",
+      "diagnostic_report_code",
+      "diagnostic_report_display",
       "specimen_names",
       "observation_names",
       "charge_item_names",
@@ -688,7 +446,9 @@ export default function ActivityDefinitionImport({
         "http://snomed.info/sct",
         "26604007",
         "Complete blood count",
-        "718-7,6690-2",
+        "http://loinc.org",
+        "718-7",
+        "Hemoglobin [Mass/volume] in Blood",
         "Whole Blood",
         "Hemoglobin, Platelet Count",
         "CBC Charge Item",

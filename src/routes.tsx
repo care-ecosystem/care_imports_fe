@@ -7,6 +7,7 @@ import DepartmentImport from "@/components/pages/DepartmentImport";
 import ImportsLayout, { ImportTabId } from "@/components/pages/ImportsLayout";
 import LinkUsersImport from "@/components/pages/LinkUsersImport";
 import LocationImport from "@/components/pages/LocationImport";
+import MasterDataImport from "@/components/pages/MasterDataImport";
 import ObservationDefinitionImport from "@/components/pages/ObservationDefinitionImport";
 import ProductImport from "@/components/pages/ProductImport";
 import ProductKnowledgeImport from "@/components/pages/ProductKnowledgeImport";
@@ -19,7 +20,9 @@ const renderImportsPage = (activeTab: ImportTabId, content: ReactNode) => (
 );
 
 const routes = {
-  "/admin/import": () => <Redirect to="/admin/import/users" />,
+  "/admin/import": () => <Redirect to="/admin/import/master-data" />,
+  "/admin/import/master-data": () =>
+    renderImportsPage("master-data", <MasterDataImport />),
   "/admin/import/users": () => renderImportsPage("users", <UsersImportPage />),
   "/admin/import/departments": () =>
     renderImportsPage("departments", <DepartmentImport />),

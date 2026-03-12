@@ -16,6 +16,7 @@ export type ImportTabId =
   | "link-users"
   | "locations"
   | "charge-item-definition"
+  | "master-data"
   | "product-knowledge"
   | "product"
   | "observation-definition"
@@ -38,6 +39,11 @@ interface CurrentUserResponse {
 }
 
 const getTabConfig = () => [
+  {
+    id: "master-data" as const,
+    label: "Master Data",
+    path: "/admin/import/master-data",
+  },
   {
     id: "users" as const,
     label: "Users",
