@@ -26,9 +26,33 @@ import {
   LocationWrite,
 } from "@/types/location/location";
 import { locationApi } from "@/types/location/locationApi";
+import { parseCsvText } from "@/utils/csv";
 
 interface LocationImportProps {
   facilityId?: string;
+}
+
+interface LocationImportFailure {
+  locationName: string;
+  reason: string;
+}
+
+interface LocationImportResults {
+  processed: number;
+  created: number;
+  failed: number;
+  failures: LocationImportFailure[];
+}
+
+interface LocationImportProgressUpdate {
+  processed: number;
+  created: number;
+  failed: number;
+  failures?: LocationImportFailure[];
+}
+
+interface SaveLocationsOptions {
+  onProgress?: (update: LocationImportProgressUpdate) => void;
 }
 
 const LocationFormLabels = {
@@ -53,12 +77,23 @@ const mapLabelToForm = (label: string): LocationForm | undefined => {
   return formKey as LocationForm | undefined;
 };
 
-const processRowLocations = (data: string[][]) => {
-  let locations: LocationImportT[] = [];
+const shouldApplyOrganizationsForForm = (form: LocationForm) =>
+  !["bu", "wi", "lvl"].includes(form);
+
+type LocationImportWithDepartment = LocationImportT & {
+  departmentNames?: string[];
+  children: LocationImportWithDepartment[];
+};
+
+const processRowLocations = (
+  data: { values: string[]; departmentNames?: string[] }[],
+) => {
+  let locations: LocationImportWithDepartment[] = [];
   const processAtLocation = (
     locationData: string[],
-    locations: LocationImportT[],
-  ): LocationImportT[] => {
+    locations: LocationImportWithDepartment[],
+    departmentNames?: string[],
+  ): LocationImportWithDepartment[] => {
     const [location, location_type, description] = locationData.slice(0, 3);
     const tail = locationData.slice(3);
 
@@ -69,23 +104,34 @@ const processRowLocations = (data: string[][]) => {
         ...locations.filter((l) => l.name !== location),
         {
           ...existingLocation,
-          children: processAtLocation(tail, existingLocation.children),
+          children: processAtLocation(
+            tail,
+            existingLocation.children,
+            departmentNames,
+          ),
         },
       ];
     } else {
       const locationForm = mapLabelToForm(location_type?.toLowerCase()) || "ro";
-      const newLocation: LocationImportT = {
+      const shouldApplyOrganizations =
+        shouldApplyOrganizationsForForm(locationForm);
+      const newLocation: LocationImportWithDepartment = {
         name: location,
         form: locationForm,
         mode: locationForm === "bd" ? "instance" : "kind",
         status: "active",
         operational_status: "U",
         description,
+        departmentNames: shouldApplyOrganizations ? departmentNames : undefined,
         children: [],
       };
-      let children: LocationImportT[] = [];
+      let children: LocationImportWithDepartment[] = [];
       if (tail.length > 0 && tail[0] != "") {
-        children = processAtLocation(tail, newLocation.children);
+        children = processAtLocation(
+          tail,
+          newLocation.children,
+          departmentNames,
+        );
       }
       return [
         ...locations,
@@ -98,18 +144,37 @@ const processRowLocations = (data: string[][]) => {
   };
 
   for (const locationRow of data) {
-    locations = processAtLocation(locationRow, locations);
+    locations = processAtLocation(
+      locationRow.values,
+      locations,
+      locationRow.departmentNames,
+    );
   }
 
   return locations;
 };
 
+const parseDepartmentNames = (value?: string): string[] | undefined => {
+  if (!value) return undefined;
+  const names = value
+    .split(/[;,]/)
+    .map((name) => name.trim())
+    .filter(Boolean);
+  return names.length > 0 ? names : undefined;
+};
+
 export default function LocationImport({ facilityId }: LocationImportProps) {
   const [processedLocations, setProcessedLocations] = useState<
-    LocationImportT[]
+    LocationImportWithDepartment[]
   >([]);
-  const [currentStep, setCurrentStep] = useState<"upload" | "review">("upload");
+  const [currentStep, setCurrentStep] = useState<
+    "upload" | "review" | "importing" | "done"
+  >("upload");
   const [uploadError, setUploadError] = useState<string>("");
+  const [importProgress, setImportProgress] = useState(0);
+  const [importTotal, setImportTotal] = useState(0);
+  const [importProcessed, setImportProcessed] = useState(0);
+  const [results, setResults] = useState<LocationImportResults | null>(null);
   const { saveLocations } = useSaveLocations(facilityId ?? "");
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -124,32 +189,34 @@ export default function LocationImport({ facilityId }: LocationImportProps) {
     const reader = new FileReader();
     reader.onload = (e) => {
       try {
-        console.log("Here?");
         const csvText = e.target?.result as string;
-        const rows = csvText.split("\n");
-        const headers = rows[0]
-          .split(",")
-          .map((h) => h.trim().replace(/"/g, ""));
+        const { headers, rows } = parseCsvText(csvText);
         console.log("Parsed headers:", headers);
 
-        if (headers.length < 3 || headers.length % 3 !== 0) {
+        const hasDepartmentHeader =
+          headers[headers.length - 1]?.trim().toLowerCase() === "department";
+        const effectiveHeaders = hasDepartmentHeader
+          ? headers.slice(0, -1)
+          : headers;
+
+        if (effectiveHeaders.length < 3 || effectiveHeaders.length % 3 !== 0) {
           setUploadError(
             "CSV format is invalid. Expected groups of 3 columns: location, type, description",
           );
           return;
         }
 
-        const data: string[][] = [];
+        const data: { values: string[]; departmentNames?: string[] }[] = [];
 
-        for (let i = 1; i < rows.length; i++) {
-          if (rows[i].trim()) {
-            const values = rows[i]
-              .split(",")
-              .map((v) => v.trim().replace(/"/g, ""));
+        for (const row of rows) {
+          if (row.length === 0) continue;
+          const departmentNames = hasDepartmentHeader
+            ? parseDepartmentNames(row[row.length - 1])
+            : undefined;
+          const effectiveValues = hasDepartmentHeader ? row.slice(0, -1) : row;
 
-            if (values.length >= headers.length) {
-              data.push(values);
-            }
+          if (effectiveValues.length >= effectiveHeaders.length) {
+            data.push({ values: effectiveValues, departmentNames });
           }
         }
 
@@ -161,6 +228,44 @@ export default function LocationImport({ facilityId }: LocationImportProps) {
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleSaveLocations = async () => {
+    if (!facilityId) return;
+    if (processedLocations.length === 0) return;
+
+    const total = countTotalLocations(processedLocations);
+    setCurrentStep("importing");
+    setImportTotal(total);
+    setImportProcessed(0);
+    setImportProgress(0);
+    setResults({ processed: 0, created: 0, failed: 0, failures: [] });
+
+    await saveLocations(processedLocations, {
+      onProgress: (update: LocationImportProgressUpdate) => {
+        setImportProcessed((prev) => {
+          const nextProcessed = prev + update.processed;
+          setImportProgress(
+            total > 0 ? Math.round((nextProcessed / total) * 100) : 0,
+          );
+          return nextProcessed;
+        });
+        setResults((prev) =>
+          prev
+            ? {
+                processed: prev.processed + update.processed,
+                created: prev.created + update.created,
+                failed: prev.failed + update.failed,
+                failures: update.failures
+                  ? [...prev.failures, ...update.failures]
+                  : prev.failures,
+              }
+            : prev,
+        );
+      },
+    });
+
+    setCurrentStep("done");
   };
 
   if (currentStep === "upload") {
@@ -207,10 +312,10 @@ export default function LocationImport({ facilityId }: LocationImportProps) {
                     variant="outline"
                     size="sm"
                     onClick={() => {
-                      const sampleCSV = `Building,type,description,Room,type,description,Bed,type,description
-Main Building,building,Main hospital building,ICU,ward,Intensive Care Unit,Bed 1,bed,ICU Bed 1
-Main Building,building,Main hospital building,ICU,ward,Intensive Care Unit,Bed 2,bed,ICU Bed 2
-Main Building,building,Main hospital building,Reception,room,Main reception area,Waiting Area,area,Patient waiting space`;
+                      const sampleCSV = `Building,type,description,Room,type,description,Bed,type,description,department
+Main Building,building,Main hospital building,ICU,ward,Intensive Care Unit,Bed 1,bed,ICU Bed 1,Cardiology
+Main Building,building,Main hospital building,ICU,ward,Intensive Care Unit,Bed 2,bed,ICU Bed 2,Cardiology
+Main Building,building,Main hospital building,Reception,room,Main reception area,Waiting Area,area,Patient waiting space,Administration`;
                       const blob = new Blob([sampleCSV], { type: "text/csv" });
                       const url = window.URL.createObjectURL(blob);
                       const a = document.createElement("a");
@@ -251,6 +356,61 @@ Main Building,building,Main hospital building,Reception,room,Main reception area
     );
   }
 
+  if (currentStep === "importing") {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Importing Locations</CardTitle>
+            <CardDescription>
+              {importProcessed}/{importTotal} processed
+            </CardDescription>
+            <div className="mt-4">
+              <Progress value={importProgress} className="h-2" />
+            </div>
+          </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  if (currentStep === "done") {
+    return (
+      <div className="max-w-4xl mx-auto">
+        <Card>
+          <CardHeader>
+            <CardTitle>Location Import Complete</CardTitle>
+            <CardDescription>
+              Created: {results?.created ?? 0} · Failed: {results?.failed ?? 0}
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            {results && results.failures.length > 0 && (
+              <Alert className="mb-4" variant="destructive">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  {results.failures.map((failure) => (
+                    <div key={`${failure.locationName}-${failure.reason}`}>
+                      {failure.locationName}: {failure.reason}
+                    </div>
+                  ))}
+                </AlertDescription>
+              </Alert>
+            )}
+            <div className="flex flex-wrap gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setCurrentStep("upload")}
+              >
+                Import Another File
+              </Button>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="max-w-7xl mx-auto">
       <Card>
@@ -269,10 +429,7 @@ Main Building,building,Main hospital building,Reception,room,Main reception area
             <HierarchicalLocationPreview locations={processedLocations} />
           </div>
           <div className="flex justify-end">
-            <Button
-              className="mt-4"
-              onClick={() => facilityId && saveLocations(processedLocations)}
-            >
+            <Button className="mt-4" onClick={handleSaveLocations}>
               Save
             </Button>
           </div>
@@ -285,7 +442,7 @@ Main Building,building,Main hospital building,Reception,room,Main reception area
 const HierarchicalLocationPreview = ({
   locations,
 }: {
-  locations: LocationImportT[];
+  locations: LocationImportWithDepartment[];
 }) => {
   const [expandedItems, setExpandedItems] = useState<Set<string>>(new Set());
   const toggleExpanded = (locationId: string) => {
@@ -298,7 +455,10 @@ const HierarchicalLocationPreview = ({
     setExpandedItems(newExpanded);
   };
 
-  const renderLocationItem = (location: LocationImportT, depth: number = 0) => {
+  const renderLocationItem = (
+    location: LocationImportWithDepartment,
+    depth: number = 0,
+  ) => {
     const IconComponent = LocationTypeIcons[location.form];
     const hasChildren = location.children && location.children.length > 0;
     const isExpanded = expandedItems.has(location.name);
@@ -444,9 +604,11 @@ const HierarchicalLocationPreview = ({
   );
 };
 
-const countTotalLocations = (locations: LocationImportT[]): number => {
+const countTotalLocations = (
+  locations: LocationImportWithDepartment[],
+): number => {
   let count = 0;
-  const countRecursive = (locs: LocationImportT[]) => {
+  const countRecursive = (locs: LocationImportWithDepartment[]) => {
     locs.forEach((loc) => {
       count++;
       if (loc.children.length > 0) {
@@ -460,8 +622,18 @@ const countTotalLocations = (locations: LocationImportT[]): number => {
 
 export function useSaveLocations(facilityId: string) {
   const saveLocations = useCallback(
-    async (roots: LocationImportT[]) => {
-      await saveLocationTree(facilityId, undefined, roots);
+    async (
+      roots: LocationImportWithDepartment[],
+      options?: SaveLocationsOptions,
+    ) => {
+      const departmentMap = await resolveDepartmentMap(facilityId);
+      await saveLocationTree(
+        facilityId,
+        undefined,
+        roots,
+        departmentMap,
+        options,
+      );
     },
     [facilityId],
   );
@@ -469,34 +641,111 @@ export function useSaveLocations(facilityId: string) {
   return { saveLocations };
 }
 
+const collectLocationFailures = (
+  node: LocationImportWithDepartment,
+  reason: string,
+): LocationImportFailure[] => {
+  const failures: LocationImportFailure[] = [
+    { locationName: node.name, reason },
+  ];
+  node.children.forEach((child) => {
+    failures.push(...collectLocationFailures(child, reason));
+  });
+  return failures;
+};
+
 async function saveLocationTree(
   facilityId: string,
   parentId: string | undefined,
-  nodes: LocationImportT[],
+  nodes: LocationImportWithDepartment[],
+  departmentMap: Map<string, string>,
+  options?: SaveLocationsOptions,
 ): Promise<void> {
   for (const node of nodes) {
-    const { path } = locationApi.create;
-    const url = path.replace("{facility_id}", facilityId);
+    try {
+      const { path } = locationApi.create;
+      const url = path.replace("{facility_id}", facilityId);
 
-    const payload: LocationWrite = {
-      parent: parentId ?? undefined,
-      organizations: [],
-      status: node.status,
-      operational_status: node.operational_status,
-      name: node.name,
-      description: node.description,
-      location_type: node.location_type,
-      form: node.form,
-      mode: node.mode,
-    };
+      const shouldApplyOrganizations = shouldApplyOrganizationsForForm(
+        node.form,
+      );
+      const organizationIds =
+        shouldApplyOrganizations && node.departmentNames?.length
+          ? Array.from(
+              new Set(
+                node.departmentNames
+                  .map((name) => departmentMap.get(name.trim().toLowerCase()))
+                  .filter((id): id is string => Boolean(id)),
+              ),
+            )
+          : [];
 
-    const created = await request<LocationDetail>(url, {
-      method: "POST",
-      body: JSON.stringify(payload),
-    });
+      const payload: LocationWrite = {
+        parent: parentId ?? undefined,
+        organizations: [],
+        status: node.status,
+        operational_status: node.operational_status,
+        name: node.name,
+        description: node.description,
+        location_type: node.location_type,
+        form: node.form,
+        mode: node.mode,
+      };
 
-    if (node.children.length > 0) {
-      await saveLocationTree(facilityId, created.id, node.children);
+      const created = await request<LocationDetail>(url, {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+
+      if (shouldApplyOrganizations && organizationIds.length > 0) {
+        await Promise.all(
+          organizationIds.map((organization) =>
+            request(
+              `/api/v1/facility/${facilityId}/location/${created.id}/organizations_add/`,
+              {
+                method: "POST",
+                body: JSON.stringify({ organization }),
+              },
+            ),
+          ),
+        );
+      }
+
+      options?.onProgress?.({ processed: 1, created: 1, failed: 0 });
+
+      if (node.children.length > 0) {
+        await saveLocationTree(
+          facilityId,
+          created.id,
+          node.children,
+          departmentMap,
+          options,
+        );
+      }
+    } catch (error) {
+      const reason = error instanceof Error ? error.message : "Unknown error";
+      const failures = collectLocationFailures(node, reason);
+      options?.onProgress?.({
+        processed: failures.length,
+        created: 0,
+        failed: failures.length,
+        failures,
+      });
     }
   }
 }
+
+const resolveDepartmentMap = async (facilityId: string) => {
+  const response = await request<{ results: { id: string; name: string }[] }>(
+    `/api/v1/facility/${facilityId}/organizations/?limit=500`,
+    { method: "GET" },
+  );
+  const map = new Map<string, string>();
+  response.results.forEach((org) => {
+    const key = org.name.trim().toLowerCase();
+    if (!map.has(key)) {
+      map.set(key, org.id);
+    }
+  });
+  return map;
+};
