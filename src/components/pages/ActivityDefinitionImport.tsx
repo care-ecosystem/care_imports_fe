@@ -10,6 +10,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { disableOverride } from "@/config";
+import { useMasterDataAvailability } from "@/hooks/useMasterDataAvailability";
 import { ResourceCategoryResourceType } from "@/types/base/resourceCategory/resourceCategory";
 import {
   parseActivityDefinitionCsv,
@@ -81,6 +83,9 @@ export default function ActivityDefinitionImport({
   >("idle");
   const [mappingIssues, setMappingIssues] = useState<string[]>([]);
   const [lastMappingSignature, setLastMappingSignature] = useState<string>("");
+  const { availability } = useMasterDataAvailability();
+  const repoFileAvailable = availability["activity-definition"];
+  const disableManualUpload = disableOverride && repoFileAvailable;
 
   const summary = useMemo(() => {
     const valid = processedRows.filter((row) => row.errors.length === 0).length;
@@ -378,6 +383,13 @@ export default function ActivityDefinitionImport({
   ]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (disableManualUpload) {
+      setUploadError(
+        "Manual uploads are disabled because activity definition data is bundled with this build.",
+      );
+      setUploadedFileName("");
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -623,10 +635,15 @@ export default function ActivityDefinitionImport({
                 onChange={handleFileUpload}
                 className="hidden"
                 id="activity-definition-csv-upload"
+                disabled={disableManualUpload}
               />
               <label
                 htmlFor="activity-definition-csv-upload"
-                className="cursor-pointer"
+                className={
+                  disableManualUpload
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer"
+                }
               >
                 <div className="flex flex-col items-center gap-4">
                   <Upload className="h-12 w-12 text-gray-400" />
@@ -652,6 +669,16 @@ export default function ActivityDefinitionImport({
               <p className="mt-3 text-sm text-gray-600">
                 Selected file: {uploadedFileName}
               </p>
+            )}
+
+            {disableManualUpload && (
+              <Alert className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Manual uploads are disabled because this build includes an
+                  activity definition dataset in the repository.
+                </AlertDescription>
+              </Alert>
             )}
 
             {uploadError && (

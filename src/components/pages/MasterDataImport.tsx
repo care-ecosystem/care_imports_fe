@@ -45,6 +45,11 @@ import {
 } from "@/utils/masterImport/specimenDefinition";
 import { upsertResourceCategories } from "@/utils/resourceCategory";
 import { createSlug } from "@/utils/slug";
+import {
+  DATASET_ORDER,
+  type DatasetId,
+  useMasterDataAvailability,
+} from "@/hooks/useMasterDataAvailability";
 
 import {
   Preference,
@@ -56,12 +61,6 @@ import {
 interface MasterDataImportProps {
   facilityId?: string;
 }
-
-type DatasetId =
-  | "product-knowledge"
-  | "specimen-definition"
-  | "observation-definition"
-  | "activity-definition";
 
 type MasterStep = "datasets" | "mapping" | "confirm" | "importing" | "done";
 
@@ -86,22 +85,12 @@ interface HealthcareServiceOption {
   name: string;
 }
 
-const DATASET_ORDER: DatasetId[] = [
-  "product-knowledge",
-  "specimen-definition",
-  "observation-definition",
-  "activity-definition",
-];
-
 const DATASET_LABELS: Record<DatasetId, string> = {
   "product-knowledge": "Product Knowledge",
   "specimen-definition": "Specimen Definitions",
   "observation-definition": "Observation Definitions",
   "activity-definition": "Activity Definitions",
 };
-
-const normalizeDatasetKey = (value: string) =>
-  value.toLowerCase().replace(/[^a-z0-9]/g, "");
 
 const normalizeName = (value: string) => value.trim().toLowerCase();
 
@@ -174,117 +163,17 @@ const cleanContainerData = (container?: ContainerSpec | null) => {
   return cleaned;
 };
 
-const resolveManifestFile = (
-  manifest: unknown,
-  datasetId: DatasetId,
-): string | undefined => {
-  if (!manifest || typeof manifest !== "object") return undefined;
-  const record = manifest as Record<string, unknown>;
-
-  const candidates = [
-    datasetId,
-    datasetId.replace(/-/g, "_"),
-    datasetId.replace(/-/g, ""),
-    datasetId
-      .split("-")
-      .map((segment, index) =>
-        index === 0 ? segment : segment[0]?.toUpperCase() + segment.slice(1),
-      )
-      .join(""),
-  ].map((key) => normalizeDatasetKey(key));
-
-  const matchFromRecord = (value: unknown) =>
-    typeof value === "string" ? value : undefined;
-
-  const direct = Object.entries(record).find(([key]) =>
-    candidates.includes(normalizeDatasetKey(key)),
-  );
-  if (direct) {
-    return matchFromRecord(direct[1]);
-  }
-
-  const datasetsValue = record.datasets;
-  if (Array.isArray(datasetsValue)) {
-    const match = datasetsValue.find((entry) => {
-      if (!entry || typeof entry !== "object") return false;
-      const entryRecord = entry as Record<string, unknown>;
-      const key =
-        entryRecord.id ??
-        entryRecord.key ??
-        entryRecord.name ??
-        entryRecord.type;
-      if (typeof key !== "string") return false;
-      return candidates.includes(normalizeDatasetKey(key));
-    }) as Record<string, unknown> | undefined;
-
-    if (match) {
-      return (
-        matchFromRecord(match.file) ||
-        matchFromRecord(match.path) ||
-        matchFromRecord(match.url)
-      );
-    }
-  }
-
-  const datasetsRecord = record.datasets;
-  if (datasetsRecord && typeof datasetsRecord === "object") {
-    const datasetEntry = Object.entries(
-      datasetsRecord as Record<string, unknown>,
-    ).find(([key]) => candidates.includes(normalizeDatasetKey(key)));
-    if (datasetEntry) {
-      return matchFromRecord(datasetEntry[1]);
-    }
-  }
-
-  const filesRecord = record.files;
-  if (filesRecord && typeof filesRecord === "object") {
-    const fileEntry = Object.entries(
-      filesRecord as Record<string, unknown>,
-    ).find(([key]) => candidates.includes(normalizeDatasetKey(key)));
-    if (fileEntry) {
-      return matchFromRecord(fileEntry[1]);
-    }
-  }
-
-  return undefined;
-};
-
-const resolveManifestBase = (manifest: unknown) => {
-  if (!manifest || typeof manifest !== "object") return "/master-data/";
-  const record = manifest as Record<string, unknown>;
-  const base =
-    (typeof record.basePath === "string" && record.basePath) ||
-    (typeof record.base_path === "string" && record.base_path) ||
-    (typeof record.baseUrl === "string" && record.baseUrl) ||
-    (typeof record.base_url === "string" && record.base_url) ||
-    "/master-data/";
-  return base.endsWith("/") ? base : `${base}/`;
-};
 
 export default function MasterDataImport({
   facilityId,
 }: MasterDataImportProps) {
   const [currentStep, setCurrentStep] = useState<MasterStep>("datasets");
-  const [manifestStatus, setManifestStatus] = useState<
-    "idle" | "loading" | "ready" | "error"
-  >("idle");
-  const [manifestError, setManifestError] = useState<string>("");
-  const [manifestFiles, setManifestFiles] = useState<Record<DatasetId, string>>(
-    {
-      "product-knowledge": "",
-      "specimen-definition": "",
-      "observation-definition": "",
-      "activity-definition": "",
-    },
-  );
-  const [manifestAvailability, setManifestAvailability] = useState<
-    Record<DatasetId, boolean>
-  >({
-    "product-knowledge": false,
-    "specimen-definition": false,
-    "observation-definition": false,
-    "activity-definition": false,
-  });
+  const {
+    status: manifestStatus,
+    error: manifestError,
+    files: manifestFiles,
+    availability: manifestAvailability,
+  } = useMasterDataAvailability();
   const [selectedDatasets, setSelectedDatasets] = useState<
     Record<DatasetId, boolean>
   >({
@@ -322,79 +211,6 @@ export default function MasterDataImport({
     total: number;
   }>({ processed: 0, total: 0 });
 
-  useEffect(() => {
-    const loadManifest = async () => {
-      setManifestStatus("loading");
-      setManifestError("");
-      try {
-        const manifestUrl = new URL(
-          "/master-data/manifest.json",
-          import.meta.url,
-        );
-        const response = await fetch(manifestUrl.toString(), {
-          cache: "no-store",
-        });
-        if (!response.ok) {
-          throw new Error("No manifest.json found in /public/master-data");
-        }
-        const manifest = (await response.json()) as unknown;
-        const basePath = resolveManifestBase(manifest);
-        const baseUrl = new URL(basePath, manifestUrl);
-        const resolved = DATASET_ORDER.reduce(
-          (acc, datasetId) => {
-            const file = resolveManifestFile(manifest, datasetId);
-            if (file) {
-              const normalized = file.startsWith("http")
-                ? file
-                : new URL(file.replace(/^\//, ""), baseUrl).toString();
-              acc[datasetId] = normalized;
-            }
-            return acc;
-          },
-          { ...manifestFiles },
-        );
-
-        const availabilityEntries = await Promise.all(
-          DATASET_ORDER.map(async (datasetId) => {
-            const url = resolved[datasetId];
-            if (!url) return [datasetId, false] as const;
-            try {
-              const check = await fetch(url, { method: "HEAD" });
-              return [datasetId, check.ok] as const;
-            } catch {
-              return [datasetId, false] as const;
-            }
-          }),
-        );
-
-        setManifestFiles(resolved);
-        setManifestAvailability(
-          availabilityEntries.reduce<Record<DatasetId, boolean>>(
-            (acc, [datasetId, ok]) => {
-              acc[datasetId] = ok;
-              return acc;
-            },
-            {
-              "product-knowledge": false,
-              "specimen-definition": false,
-              "observation-definition": false,
-              "activity-definition": false,
-            },
-          ),
-        );
-        setManifestStatus("ready");
-      } catch (error) {
-        setManifestStatus("error");
-        setManifestError(
-          error instanceof Error
-            ? error.message
-            : "Unable to load master-data manifest",
-        );
-      }
-    };
-
-    loadManifest();
-  }, []);
 
   useEffect(() => {
     if (!selectedDatasets["activity-definition"]) {

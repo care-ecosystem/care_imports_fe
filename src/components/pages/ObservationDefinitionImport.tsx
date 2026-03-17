@@ -13,6 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { disableOverride } from "@/config";
+import { useMasterDataAvailability } from "@/hooks/useMasterDataAvailability";
 import {
   parseObservationDefinitionCsv,
   type ObservationProcessedRow,
@@ -47,6 +49,9 @@ export default function ObservationDefinitionImport({
   );
   const [results, setResults] = useState<ImportResults | null>(null);
   const [totalToImport, setTotalToImport] = useState(0);
+  const { availability } = useMasterDataAvailability();
+  const repoFileAvailable = availability["observation-definition"];
+  const disableManualUpload = disableOverride && repoFileAvailable;
 
   const summary = useMemo(() => {
     const valid = processedRows.filter((row) => row.errors.length === 0).length;
@@ -55,6 +60,13 @@ export default function ObservationDefinitionImport({
   }, [processedRows]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (disableManualUpload) {
+      setUploadError(
+        "Manual uploads are disabled because observation definition data is bundled with this build.",
+      );
+      setUploadedFileName("");
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -315,10 +327,15 @@ export default function ObservationDefinitionImport({
                 onChange={handleFileUpload}
                 className="hidden"
                 id="observation-definition-csv-upload"
+                disabled={disableManualUpload}
               />
               <label
                 htmlFor="observation-definition-csv-upload"
-                className="cursor-pointer"
+                className={
+                  disableManualUpload
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer"
+                }
               >
                 <div className="flex flex-col items-center gap-4">
                   <Upload className="h-12 w-12 text-gray-400" />
@@ -343,6 +360,16 @@ export default function ObservationDefinitionImport({
               <p className="mt-3 text-sm text-gray-600">
                 Selected file: {uploadedFileName}
               </p>
+            )}
+
+            {disableManualUpload && (
+              <Alert className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Manual uploads are disabled because this build includes an
+                  observation definition dataset in the repository.
+                </AlertDescription>
+              </Alert>
             )}
 
             {uploadError && (

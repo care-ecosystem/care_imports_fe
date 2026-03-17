@@ -13,6 +13,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { disableOverride } from "@/config";
+import { useMasterDataAvailability } from "@/hooks/useMasterDataAvailability";
 import {
   parseSpecimenDefinitionCsv,
   type SpecimenProcessedRow,
@@ -53,6 +55,10 @@ export default function SpecimenDefinitionImport({
     "idle" | "loading" | "ready" | "error"
   >("idle");
   const [lastLookupSignature, setLastLookupSignature] = useState<string>("");
+  const { availability } = useMasterDataAvailability();
+  const repoFileAvailable = availability["specimen-definition"];
+  const disableManualUpload = disableOverride && repoFileAvailable;
+  console.log(disableOverride);
 
   const summary = useMemo(() => {
     const valid = processedRows.filter((row) => row.errors.length === 0).length;
@@ -144,6 +150,14 @@ export default function SpecimenDefinitionImport({
   ]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    console.log(disableManualUpload);
+    if (disableManualUpload) {
+      setUploadError(
+        "Manual uploads are disabled because specimen definition data is bundled with this build.",
+      );
+      setUploadedFileName("");
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -435,10 +449,15 @@ export default function SpecimenDefinitionImport({
                 onChange={handleFileUpload}
                 className="hidden"
                 id="specimen-definition-csv-upload"
+                disabled={disableManualUpload}
               />
               <label
                 htmlFor="specimen-definition-csv-upload"
-                className="cursor-pointer"
+                className={
+                  disableManualUpload
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer"
+                }
               >
                 <div className="flex flex-col items-center gap-4">
                   <Upload className="h-12 w-12 text-gray-400" />
@@ -463,6 +482,16 @@ export default function SpecimenDefinitionImport({
               <p className="mt-3 text-sm text-gray-600">
                 Selected file: {uploadedFileName}
               </p>
+            )}
+
+            {disableManualUpload && (
+              <Alert className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Manual uploads are disabled because this build includes a
+                  specimen definition dataset in the repository.
+                </AlertDescription>
+              </Alert>
             )}
 
             {uploadError && (

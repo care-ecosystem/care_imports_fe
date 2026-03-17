@@ -12,6 +12,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
+import { disableOverride } from "@/config";
+import { useMasterDataAvailability } from "@/hooks/useMasterDataAvailability";
 import { ResourceCategoryResourceType } from "@/types/base/resourceCategory/resourceCategory";
 import {
   ProductKnowledgeCreate,
@@ -50,6 +52,9 @@ export default function ProductKnowledgeImport({
   const [uploadError, setUploadError] = useState("");
   const [processedRows, setProcessedRows] = useState<ProcessedRow[]>([]);
   const [results, setResults] = useState<ImportResults | null>(null);
+  const { availability } = useMasterDataAvailability();
+  const repoFileAvailable = availability["product-knowledge"];
+  const disableManualUpload = disableOverride && repoFileAvailable;
 
   const summary = useMemo(() => {
     const valid = processedRows.filter((row) => row.errors.length === 0).length;
@@ -58,6 +63,12 @@ export default function ProductKnowledgeImport({
   }, [processedRows]);
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
+    if (disableManualUpload) {
+      setUploadError(
+        "Manual uploads are disabled because product knowledge data is bundled with this build.",
+      );
+      return;
+    }
     const file = event.target.files?.[0];
     if (!file) return;
 
@@ -251,10 +262,15 @@ Medication,,Isoflurane inhaler,Medication,Product containing precisely isofluran
                 onChange={handleFileUpload}
                 className="hidden"
                 id="product-knowledge-upload"
+                disabled={disableManualUpload}
               />
               <label
                 htmlFor="product-knowledge-upload"
-                className="cursor-pointer"
+                className={
+                  disableManualUpload
+                    ? "cursor-not-allowed opacity-60"
+                    : "cursor-pointer"
+                }
               >
                 <div className="flex flex-col items-center gap-4">
                   <Upload className="h-12 w-12 text-gray-400" />
@@ -276,6 +292,16 @@ Medication,,Isoflurane inhaler,Medication,Product containing precisely isofluran
                 </div>
               </label>
             </div>
+
+            {disableManualUpload && (
+              <Alert className="mt-4">
+                <AlertCircle className="h-4 w-4" />
+                <AlertDescription>
+                  Manual uploads are disabled because this build includes a
+                  product knowledge dataset in the repository.
+                </AlertDescription>
+              </Alert>
+            )}
 
             {uploadError && (
               <Alert className="mt-4" variant="destructive">
