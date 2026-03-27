@@ -149,9 +149,9 @@ export default function ActivityDefinitionImport({
                   <p className="text-sm text-gray-500">or drag and drop</p>
                 </div>
                 <p className="text-xs text-gray-400">
-                  Required columns: title, description, usage, status,
-                  classification, category_name, code_system, code_value,
-                  code_display
+                  Required columns: title, slug_value, description, usage,
+                  status, classification, category_name, code_system,
+                  code_value, code_display
                 </p>
                 <Button variant="outline" size="sm" onClick={downloadSampleCsv}>
                   Download Sample CSV

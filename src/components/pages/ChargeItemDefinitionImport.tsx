@@ -22,7 +22,7 @@ import {
   ChargeItemDefinitionStatus,
 } from "@/types/billing/chargeItemDefinition/chargeItemDefinition";
 import { parseCsvText } from "@/utils/csv";
-import { createSlug } from "@/utils/slug";
+import { createSlug, isUrlSafeSlug } from "@/utils/slug";
 
 interface ChargeItemImportProps {
   facilityId?: string;
@@ -135,6 +135,11 @@ export default function ChargeItemDefinitionImport({
           if (!slugVal) {
             errors.push("Missing slug_value");
           } else {
+            if (!isUrlSafeSlug(slugVal)) {
+              errors.push(
+                `slug_value "${slugVal}" contains invalid characters (only lowercase letters, digits, hyphens, and underscores are allowed)`,
+              );
+            }
             const prevRow = slugSeen.get(slugVal);
             if (prevRow !== undefined) {
               errors.push(
@@ -362,7 +367,8 @@ Bed Charges,bed-charges,Per day bed charge,Bed usage,1500`;
                     <p className="text-sm text-gray-500">or drag and drop</p>
                   </div>
                   <p className="text-xs text-gray-400">
-                    Expected columns: title, description, purpose, price
+                    Expected columns: title, slug_value, description, purpose,
+                    price
                   </p>
                   <Button variant="outline" size="sm" onClick={downloadSample}>
                     Download Sample CSV

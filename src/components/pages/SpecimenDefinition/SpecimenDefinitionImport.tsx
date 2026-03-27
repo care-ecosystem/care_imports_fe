@@ -234,8 +234,9 @@ export default function SpecimenDefinitionImport({
                   <p className="text-sm text-gray-500">or drag and drop</p>
                 </div>
                 <p className="text-xs text-gray-400">
-                  Required columns: title, description, type_collected_system,
-                  type_collected_code, type_collected_display
+                  Required columns: title, slug_value, description,
+                  type_collected_system, type_collected_code,
+                  type_collected_display
                 </p>
                 <Button variant="outline" size="sm" onClick={downloadSample}>
                   Download Sample CSV

@@ -1,4 +1,5 @@
 import { parseCsvText } from "@/utils/csv";
+import { isUrlSafeSlug } from "@/utils/slug";
 
 export type CodePayload = {
   system: string;
@@ -157,6 +158,11 @@ export const parseActivityDefinitionCsv = (
     if (!slugValue) {
       errors.push("Missing slug_value");
     } else {
+      if (!isUrlSafeSlug(slugValue)) {
+        errors.push(
+          `slug_value "${slugValue}" contains invalid characters (only lowercase letters, digits, hyphens, and underscores are allowed)`,
+        );
+      }
       const prevRow = slugSeen.get(slugValue);
       if (prevRow !== undefined) {
         errors.push(

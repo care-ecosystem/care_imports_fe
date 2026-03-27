@@ -5,6 +5,7 @@ import {
   ProductNameTypes,
 } from "@/types/inventory/productKnowledge/productKnowledge";
 import { parseCsvText } from "@/utils/csv";
+import { isUrlSafeSlug } from "@/utils/slug";
 
 const HEADER_MAP = {
   resourceCategory: 0,
@@ -103,6 +104,16 @@ export const parseProductKnowledgeCsv = (
         rowIndex: index + 2,
         raw: datapoint,
         errors: ["Missing slug"],
+        normalized: null,
+      };
+    }
+    if (!isUrlSafeSlug(slugVal)) {
+      return {
+        rowIndex: index + 2,
+        raw: datapoint,
+        errors: [
+          `slug "${slugVal}" contains invalid characters (only lowercase letters, digits, hyphens, and underscores are allowed)`,
+        ],
         normalized: null,
       };
     }
