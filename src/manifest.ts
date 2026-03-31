@@ -1,4 +1,4 @@
-import { Upload } from "lucide-react";
+import { Download, Upload } from "lucide-react";
 import React from "react";
 
 import routes from "./routes";
@@ -14,6 +14,11 @@ const manifest = {
       name: "Imports",
       url: "/admin/import",
       icon: React.createElement(Upload, { className: "size-4" }),
+    },
+    {
+      name: "Exports",
+      url: "/admin/export",
+      icon: React.createElement(Download, { className: "size-4" }),
     },
   ],
   encounterTabs: {},
