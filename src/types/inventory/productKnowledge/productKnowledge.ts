@@ -1,12 +1,31 @@
-export enum ProductKnowledgeStatus {
-  active = "active",
-}
+import { Code } from "@/types/base/code/code";
+import { Duration } from "@/types/base/duration/duration";
+import { ResourceCategoryRead } from "@/types/base/resourceCategory/resourceCategory";
+import { SlugConfig } from "@/types/base/slug/slugConfig";
 
 export enum ProductKnowledgeType {
-  consumable = "consumable",
   medication = "medication",
   nutritional_product = "nutritional_product",
+  consumable = "consumable",
 }
+
+export const PRODUCT_KNOWLEDGE_TYPE_COLORS = {
+  medication: "blue",
+  nutritional_product: "green",
+  consumable: "yellow",
+} as const satisfies Record<ProductKnowledgeType, string>;
+
+export enum ProductKnowledgeStatus {
+  draft = "draft",
+  active = "active",
+  retired = "retired",
+}
+
+export const PRODUCT_KNOWLEDGE_STATUS_COLORS = {
+  draft: "secondary",
+  active: "primary",
+  retired: "destructive",
+} as const satisfies Record<ProductKnowledgeStatus, string>;
 
 export enum ProductNameTypes {
   trade_name = "trade_name",
@@ -15,28 +34,83 @@ export enum ProductNameTypes {
   preferred = "preferred",
 }
 
-export interface ProductKnowledgeBase {
-  slug_config: { slug_value: string };
+export interface ProductName {
+  name_type: ProductNameTypes;
+  name: string;
 }
 
-export interface ProductKnowledgeCreate {
-  slug_value: string;
-  name: string;
-  facility: string;
+export interface StorageGuideline {
+  note: string;
+  stability_duration: Duration;
+}
+
+export enum DrugCharacteristicCode {
+  imprint_code = "imprint_code",
+  size = "size",
+  shape = "shape",
+  color = "color",
+  coating = "coating",
+  scoring = "scoring",
+  logo = "logo",
+  image = "image",
+}
+
+export interface DrugCharacteristic {
+  code: DrugCharacteristicCode;
+  value: string;
+}
+
+export interface ProductDefinition {
+  dosage_form: Code;
+  intended_routes: Code[];
+  // TODO: Add ingredients, nutrients, and drug_characteristic types when BE is ready
+  ingredients: Code[];
+  nutrients: Code[];
+  drug_characteristic: DrugCharacteristic[];
+}
+
+export interface ProductKnowledgeBase {
+  id: string;
+  slug: string;
+  alternate_identifier?: string;
   product_type: ProductKnowledgeType;
   status: ProductKnowledgeStatus;
-  base_unit: { system: string; code: string; display: string };
-  category: string;
-  names: { name_type: ProductNameTypes; name: string }[];
-  storage_guidelines: unknown[];
+  code?: Code;
+  name: string;
+  names: ProductName[];
+  storage_guidelines: StorageGuideline[];
+  definitional?: ProductDefinition;
+  base_unit: Code;
+  category: ResourceCategoryRead;
+  slug_config: SlugConfig;
   is_instance_level: boolean;
-  code?: { system: string; code: string; display: string };
-  definitional?: {
-    dosage_form?: { system: string; code: string; display: string };
-    intended_routes: { system: string; code: string; display: string }[];
-    ingredients: unknown[];
-    nutrients: unknown[];
-    drug_characteristic: unknown[];
-  };
-  alternate_identifier?: string;
 }
+
+export interface ProductKnowledgeCreate extends Omit<
+  ProductKnowledgeBase,
+  "id" | "category" | "slug_config" | "slug"
+> {
+  slug_value: string;
+  facility?: string;
+  category?: string;
+}
+
+export interface ProductKnowledgeUpdate extends Omit<
+  ProductKnowledgeBase,
+  "id" | "category" | "slug_config" | "slug"
+> {
+  slug_value: string;
+  facility?: string;
+  category?: string;
+}
+
+export const UCUM_TIME_UNITS_CODES = [
+  // { code: "ms", display: "milliseconds", system: "http://unitsofmeasure.org" },
+  // { code: "s", display: "seconds", system: "http://unitsofmeasure.org" },
+  { code: "min", display: "minutes", system: "http://unitsofmeasure.org" },
+  { code: "h", display: "hours", system: "http://unitsofmeasure.org" },
+  { code: "d", display: "days", system: "http://unitsofmeasure.org" },
+  { code: "wk", display: "weeks", system: "http://unitsofmeasure.org" },
+  { code: "mo", display: "months", system: "http://unitsofmeasure.org" },
+  { code: "a", display: "years", system: "http://unitsofmeasure.org" },
+];

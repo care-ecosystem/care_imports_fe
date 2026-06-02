@@ -1,15 +1,6 @@
 import ExportCard from "@/components/shared/ExportCard";
-
-interface UserRead {
-  username: string;
-  user_type: string;
-  first_name: string;
-  last_name: string;
-  email: string;
-  phone_number: string;
-  gender: string;
-  geo_organization?: string;
-}
+import type { UserRead } from "@/types/user/user";
+import userApi from "@/types/user/userApi";
 
 const CSV_HEADERS = [
   "userType",
@@ -29,17 +20,17 @@ export default function UsersExport() {
       title="Export Users"
       description="Export all users as a CSV file matching the import format."
       queryKey={["users"]}
-      apiPath="/api/v1/users/"
+      route={userApi.list}
       csvHeaders={CSV_HEADERS}
       mapRow={(user) => [
         user.user_type ?? "",
-        "", // prefix is not stored in the API
+        user.prefix ?? "",
         user.first_name ?? "",
         user.last_name ?? "",
         user.email ?? "",
         user.phone_number ?? "",
         user.gender ?? "",
-        user.geo_organization ?? "",
+        "", // geo_organization not available on list endpoint
         user.username ?? "",
       ]}
       filename="users_export.csv"

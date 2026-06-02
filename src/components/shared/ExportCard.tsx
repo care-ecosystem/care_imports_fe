@@ -3,6 +3,7 @@ import { Download, Loader2 } from "lucide-react";
 import { useEffect, useMemo } from "react";
 
 import { request } from "@/apis/request";
+import type { QueryParams } from "@/apis/types";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -13,8 +14,8 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import type { PaginatedResponse } from "@/utils/export";
-import { downloadCsv, toCsvString } from "@/utils/export";
+import type { PaginatedResponse } from "@/Utils/export";
+import { downloadCsv, toCsvString } from "@/Utils/export";
 
 const PAGE_SIZE = 100;
 
@@ -25,8 +26,12 @@ interface ExportCardProps<T> {
   description: string;
   /** Unique react-query cache key parts */
   queryKey: unknown[];
-  /** API path (without pagination params) */
-  apiPath: string;
+  /** Typed API route definition for the list endpoint */
+  route: { path: string; method: string };
+  /** Path parameters for the API route (e.g. { facilityId }) */
+  pathParams?: Record<string, string>;
+  /** Additional query parameters beyond limit/offset */
+  queryParams?: QueryParams;
   /** CSV column headers */
   csvHeaders: string[];
   /** Map a single API result row to CSV column values */
@@ -43,15 +48,15 @@ export default function ExportCard<T>({
   title,
   description,
   queryKey,
-  apiPath,
+  route,
+  pathParams,
+  queryParams: extraQueryParams,
   csvHeaders,
   mapRow,
   filename,
   transformResults,
   enabled = true,
 }: ExportCardProps<T>) {
-  const separator = apiPath.includes("?") ? "&" : "?";
-
   const {
     data,
     fetchNextPage,
@@ -63,8 +68,10 @@ export default function ExportCard<T>({
   } = useInfiniteQuery({
     queryKey: ["export", ...queryKey],
     queryFn: async ({ pageParam = 0 }) => {
-      const url = `${apiPath}${separator}limit=${PAGE_SIZE}&offset=${pageParam}`;
-      return await request<PaginatedResponse<T>>(url, { method: "GET" });
+      return (await request(route as never, {
+        pathParams,
+        queryParams: { ...extraQueryParams, limit: PAGE_SIZE, offset: pageParam },
+      } as never)) as PaginatedResponse<T>;
     },
     initialPageParam: 0,
     getNextPageParam: (lastPage, allPages) => {

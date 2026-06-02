@@ -13,21 +13,12 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import type { PaginatedResponse } from "@/utils/export";
-import { downloadCsv, toCsvString } from "@/utils/export";
+import type { LocationRead } from "@/types/location/location";
+import locationApi from "@/types/location/locationApi";
+import { downloadCsv, toCsvString } from "@/Utils/export";
 
 interface LocationExportProps {
   facilityId?: string;
-}
-
-interface LocationRead {
-  id: string;
-  name: string;
-  form: string;
-  description: string;
-  status: string;
-  parent?: string | null;
-  has_children: boolean;
 }
 
 const PAGE_SIZE = 100;
@@ -64,9 +55,17 @@ function buildHierarchicalCsvRows(locations: LocationRead[]): string[][] {
     if (!loc.parent) {
       roots.push(loc);
     } else {
-      const children = childrenMap.get(loc.parent) ?? [];
+      const parentId = loc.parent.id;
+      const children = childrenMap.get(parentId) ?? [];
       children.push(loc);
-      childrenMap.set(loc.parent, children);
+      childrenMap.set(parentId, children);
+    }
+  }
+
+  // Treat locations whose parent wasn't fetched as roots (orphans)
+  for (const loc of locations) {
+    if (loc.parent && !byId.has(loc.parent.id)) {
+      roots.push(loc);
     }
   }
 
@@ -122,9 +121,6 @@ export default function LocationExport({ facilityId }: LocationExportProps) {
 }
 
 function LocationExportInner({ facilityId }: { facilityId: string }) {
-  const separator = "?";
-  const apiPath = `/api/v1/facility/${facilityId}/location/`;
-
   const {
     data,
     fetchNextPage,
@@ -136,9 +132,9 @@ function LocationExportInner({ facilityId }: { facilityId: string }) {
   } = useInfiniteQuery({
     queryKey: ["export", "locations", facilityId],
     queryFn: async ({ pageParam = 0 }) => {
-      const url = `${apiPath}${separator}limit=${PAGE_SIZE}&offset=${pageParam}`;
-      return await request<PaginatedResponse<LocationRead>>(url, {
-        method: "GET",
+      return await request(locationApi.list, {
+        pathParams: { facility_id: facilityId },
+        queryParams: { limit: PAGE_SIZE, offset: pageParam },
       });
     },
     initialPageParam: 0,

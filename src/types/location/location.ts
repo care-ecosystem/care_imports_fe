@@ -10,7 +10,15 @@ import {
   Map,
 } from "lucide-react";
 
+import { Badge } from "@/components/ui/badge";
+
+import { Code } from "@/types/base/code/code";
+import { EncounterRead } from "@/types/emr/encounter/encounter";
+import { FacilityOrganizationRead } from "@/types/facilityOrganization/facilityOrganization";
+
 export type Status = "active" | "inactive" | "unknown";
+
+export type SystemAvailabilityStatus = "available" | "reserved";
 
 export type OperationalStatus = "C" | "H" | "O" | "U" | "K" | "I";
 
@@ -23,7 +31,7 @@ export interface LocationBase {
   operational_status: OperationalStatus;
   name: string;
   description: string;
-  location_type?: unknown;
+  location_type?: Code;
   form: LocationForm;
   mode: LocationMode;
 }
@@ -31,7 +39,21 @@ export interface LocationBase {
 export interface LocationDetail extends LocationBase {
   id: string;
   has_children: boolean;
+  organizations: FacilityOrganizationRead[];
+  sort_index: number;
+  system_availability_status: SystemAvailabilityStatus;
 }
+
+export interface LocationRead extends LocationBase {
+  id: string;
+  has_children: boolean;
+  parent?: LocationRead;
+  current_encounter?: EncounterRead;
+  sort_index: number;
+  system_availability_status: SystemAvailabilityStatus;
+}
+
+export type LocationMinSpec = Omit<LocationRead, "current_encounter">;
 
 export interface LocationWrite extends LocationBase {
   id?: string;
@@ -65,19 +87,40 @@ export const LocationFormOptions = [
 ] as const;
 
 export const LocationTypeIcons = {
-  bd: Bed,
-  wa: Hospital,
-  lvl: Building2,
-  bu: Building,
-  si: Map,
-  wi: Building2,
-  co: Building2,
-  ro: Home,
-  ve: Car,
-  ho: Home,
-  ca: Car,
-  rd: Car,
-  area: Map,
-  jdn: Map,
-  vi: Eye,
+  bd: Bed, // bed
+  wa: Hospital, // ward
+  lvl: Building2, // level/floor
+  bu: Building, // building
+  si: Map, // site
+  wi: Building2, // wing
+  co: Building2, // corridor
+  ro: Home, // room
+  ve: Car, // vehicle
+  ho: Home, // house
+  ca: Car, // carpark
+  rd: Car, // road
+  area: Map, // area
+  jdn: Map, // garden
+  vi: Eye, // virtual
 } as const satisfies Record<LocationForm, LucideIcon>;
+
+export const LOCATION_TYPE_BADGE_COLORS = {
+  bd: "blue", // bed
+  wa: "teal", // ward
+  lvl: "green", // level/floor
+  bu: "yellow", // building
+  si: "orange", // site
+  wi: "indigo", // wing
+  co: "pink", // corridor
+  ro: "blue", // room
+  ve: "secondary", // vehicle
+  ho: "primary", // house
+  ca: "indigo", // carpark
+  rd: "yellow", // road
+  area: "green", // area
+  jdn: "teal", // garden
+  vi: "indigo", // virtual
+} as const satisfies Record<
+  LocationForm,
+  React.ComponentProps<typeof Badge>["variant"]
+>;

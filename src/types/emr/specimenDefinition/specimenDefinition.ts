@@ -1,6 +1,6 @@
-import { Code } from "../../base/code/code";
-import { SlugConfig } from "../../base/slug/slugConfig";
-import { UserReadMinimal } from "../../user/user";
+import { Code } from "@/types/base/code/code";
+import { SlugConfig } from "@/types/base/slug/slugConfig";
+import { UserReadMinimal } from "@/types/user/user";
 
 export enum SpecimenDefinitionStatus {
   draft = "draft",
@@ -105,61 +105,10 @@ export interface SpecimenDefinitionCreate extends Omit<
   type_tested?: TypeTestedSpec;
 }
 
-export interface SpecimenDefinitionUpsert extends Omit<
-  SpecimenDefinition,
-  "id" | "facility"
-> {
-  id?: string;
-  type_tested?: TypeTestedSpec;
-}
-
 export interface SpecimenDefinitionRead extends SpecimenDefinition {
   created_by: UserReadMinimal;
   updated_by: UserReadMinimal;
   created_at: string;
   updated_at: string;
   type_tested?: TypeTestedSpec;
-}
-
-export interface SpecimenDefinitionImportProps {
-  facilityId?: string;
-}
-
-export interface SpecimenRow {
-  title: string;
-  slug_value?: string;
-  status: SpecimenDefinitionStatus;
-  description: string;
-  derived_from_uri?: string;
-  type_collected: Code;
-  patient_preparation: Code[];
-  collection: Code | null;
-  is_derived?: boolean;
-  preference?: Preference;
-  single_use?: boolean;
-  requirement?: string;
-  retention_time?: DurationSpec | null;
-  container?: ContainerSpec | null;
-}
-
-export interface CodeReference {
-  signature: string;
-  label: string;
-  code: Code;
-}
-
-export interface ProcessedRow {
-  rowIndex: number;
-  data: SpecimenRow;
-  errors: string[];
-  codeReferences: CodeReference[];
-}
-
-export interface ImportResults {
-  processed: number;
-  created: number;
-  updated: number;
-  failed: number;
-  skipped: number;
-  failures: { rowIndex: number; title?: string; reason: string }[];
 }

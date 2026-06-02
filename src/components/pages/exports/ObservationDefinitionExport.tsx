@@ -13,68 +13,22 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import type { PaginatedResponse } from "@/utils/export";
+import type { ObservationDefinitionReadSpec } from "@/types/emr/observationDefinition/observationDefinition";
+import observationDefinitionApi from "@/types/emr/observationDefinition/observationDefinitionApi";
 import {
   csvEscape,
   downloadCsv,
   stripFacilitySlugPrefix,
   toCsvString,
-} from "@/utils/export";
+} from "@/Utils/export";
 import {
   COMPONENT_CSV_HEADERS,
   OBSERVATION_DEFINITION_CSV_HEADERS,
-} from "@/utils/observationDefinitionConstants";
+  OBSERVATION_QUALIFIED_RANGE_CSV_HEADERS,
+} from "@/Utils/observationDefinitionConstants";
 
 interface ObservationDefinitionExportProps {
   facilityId?: string;
-}
-
-interface CodePayload {
-  system?: string;
-  code?: string;
-  display?: string;
-}
-
-interface Condition {
-  metric: string;
-  operation?: string;
-  value: unknown;
-}
-
-interface RangeBand {
-  interpretation?: { display?: string };
-  min?: string | number;
-  max?: string | number;
-}
-
-interface QualifiedRange {
-  conditions?: Condition[];
-  ranges?: RangeBand[];
-}
-
-interface ComponentPayload {
-  code?: CodePayload;
-  permitted_data_type?: string;
-  permitted_unit?: CodePayload | null;
-  qualified_ranges?: QualifiedRange[];
-}
-
-interface ObservationDefinitionRead {
-  id: string;
-  title: string;
-  slug: string;
-  slug_config?: { slug_value: string };
-  description?: string;
-  category?: string;
-  status?: string;
-  code?: CodePayload;
-  permitted_data_type?: string;
-  body_site?: CodePayload | null;
-  method?: CodePayload | null;
-  permitted_unit?: CodePayload | null;
-  derived_from_uri?: string;
-  component?: ComponentPayload[];
-  qualified_ranges?: QualifiedRange[];
 }
 
 const PAGE_SIZE = 100;
@@ -83,12 +37,21 @@ const PAGE_SIZE = 100;
  * Build the definitions CSV rows — one row per observation definition,
  * matching OBSERVATION_DEFINITION_CSV_HEADERS.
  */
-function buildDefinitionRows(items: ObservationDefinitionRead[]): string[][] {
-  return items.map((item) => {
+function buildDefinitionRows(
+  items: ObservationDefinitionReadSpec[],
+): string[][] {
+  const rows: string[][] = [];
+  const QUALIFIED_RANGE_CELL_COUNT =
+    OBSERVATION_QUALIFIED_RANGE_CSV_HEADERS.length;
+  const baseDefinitionCellCount =
+    OBSERVATION_DEFINITION_CSV_HEADERS.length - QUALIFIED_RANGE_CELL_COUNT;
+
+  for (const item of items) {
     const slug = stripFacilitySlugPrefix(
       item.slug_config?.slug_value ?? item.slug ?? "",
     );
-    return [
+
+    const baseCells = [
       item.title ?? "",
       slug,
       item.description ?? "",
@@ -109,14 +72,85 @@ function buildDefinitionRows(items: ObservationDefinitionRead[]): string[][] {
       item.permitted_unit?.display ?? "",
       item.derived_from_uri ?? "",
     ];
-  });
+    const continuationBaseCells = [
+      item.title ?? "",
+      slug,
+      ...Array(Math.max(baseDefinitionCellCount - 2, 0)).fill(""),
+    ];
+
+    const qualifiedRanges = item.qualified_ranges ?? [];
+    if (qualifiedRanges.length === 0) {
+      rows.push([
+        ...baseCells,
+        ...Array(QUALIFIED_RANGE_CELL_COUNT).fill(""),
+      ]);
+      continue;
+    }
+
+    let isFirstRangeRow = true;
+    for (const qr of qualifiedRanges) {
+      let ageMin = "";
+      let ageMax = "";
+      let ageOp = "";
+      let gender = "";
+
+      for (const cond of qr.conditions ?? []) {
+        if (cond.metric === "patient_age") {
+          const val = cond.value as {
+            min?: number;
+            max?: number;
+            value_type?: string;
+          };
+          ageMin = val.min != null ? String(val.min) : "";
+          ageMax = val.max != null ? String(val.max) : "";
+          ageOp = val.value_type ?? "";
+        } else if (cond.metric === "patient_gender") {
+          gender = String(cond.value ?? "");
+        }
+      }
+
+      const rangeBands = qr.ranges ?? [];
+      if (rangeBands.length === 0) {
+        rows.push([
+          ...(isFirstRangeRow ? baseCells : continuationBaseCells),
+          ageMin,
+          ageMax,
+          ageOp,
+          gender,
+          "",
+          "",
+          "",
+        ]);
+        isFirstRangeRow = false;
+        continue;
+      }
+
+      for (const band of rangeBands) {
+        rows.push([
+          ...(isFirstRangeRow ? baseCells : continuationBaseCells),
+          ageMin,
+          ageMax,
+          ageOp,
+          gender,
+          band.interpretation?.display ?? "",
+          band.min != null ? String(band.min) : "",
+          band.max != null ? String(band.max) : "",
+        ]);
+        isFirstRangeRow = false;
+      }
+    }
+  }
+
+  return rows;
 }
 
 /**
  * Build the components CSV rows — one row per component × qualified_range × range band,
  * matching COMPONENT_CSV_HEADERS.
  */
-function buildComponentRows(items: ObservationDefinitionRead[]): string[][] {
+function buildComponentRows(
+  items: ObservationDefinitionReadSpec[],
+): string[][] {
   const rows: string[][] = [];
 
   for (const item of items) {
@@ -126,8 +160,8 @@ function buildComponentRows(items: ObservationDefinitionRead[]): string[][] {
 
     const components = item.component ?? [];
     for (const comp of components) {
-      const compCode = comp.code ?? {};
-      const compUnit = comp.permitted_unit ?? {};
+      const compCode = comp.code;
+      const compUnit = comp.permitted_unit;
       const qualifiedRanges = comp.qualified_ranges ?? [];
 
       if (qualifiedRanges.length === 0) {
@@ -233,9 +267,6 @@ function ObservationDefinitionExportInner({
 }: {
   facilityId: string;
 }) {
-  const apiPath = `/api/v1/observation_definition/?facility=${facilityId}`;
-  const separator = "&";
-
   const {
     data,
     fetchNextPage,
@@ -247,9 +278,12 @@ function ObservationDefinitionExportInner({
   } = useInfiniteQuery({
     queryKey: ["export", "observation-definition", facilityId],
     queryFn: async ({ pageParam = 0 }) => {
-      const url = `${apiPath}${separator}limit=${PAGE_SIZE}&offset=${pageParam}`;
-      return await request<PaginatedResponse<ObservationDefinitionRead>>(url, {
-        method: "GET",
+      return await request(observationDefinitionApi.listObservationDefinition, {
+        queryParams: {
+          facility: facilityId,
+          limit: PAGE_SIZE,
+          offset: pageParam,
+        },
       });
     },
     initialPageParam: 0,
@@ -284,10 +318,7 @@ function ObservationDefinitionExportInner({
       [...OBSERVATION_DEFINITION_CSV_HEADERS],
       defRows,
     );
-    downloadCsv(
-      `observation_definitions_export_${facilityId}.csv`,
-      defCsvText,
-    );
+    downloadCsv(`observation_definitions_export_${facilityId}.csv`, defCsvText);
 
     // Download components CSV (only if there are component rows)
     const compRows = buildComponentRows(allItems);

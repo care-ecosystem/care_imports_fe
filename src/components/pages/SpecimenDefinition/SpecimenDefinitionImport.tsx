@@ -1,4 +1,25 @@
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Database } from "lucide-react";
+import { useCallback, useMemo, useState } from "react";
+
+import { HttpError, request } from "@/apis/request";
+import { ImportFlow } from "@/components/imports";
+import {
+  SD_CSV_REVIEW_COLUMNS,
+  SD_HEADER_MAP,
+  SD_REQUIRED_HEADERS,
+  SD_REVIEW_COLUMNS,
+  SD_SAMPLE_CSV,
+  SpecimenDefinitionRowSchema,
+  parseMasterCsvToRows,
+  parseSpecimenDefinitionRow,
+  toSpecimenDefinitionCsvPayload,
+  toSpecimenDefinitionDatapoint,
+  validateSpecimenDefinitionMasterRows,
+  validateSpecimenDefinitionRows,
+  type SpecimenDefinitionCsvRow,
+  type SpecimenDefinitionRow,
+} from "@/components/pages/SpecimenDefinition/utils";
+import MasterDataFileSelector from "@/components/shared/MasterDataFileSelector";
 import { Button } from "@/components/ui/button";
 import {
   Card,
@@ -9,307 +30,231 @@ import {
 } from "@/components/ui/card";
 import { disableOverride } from "@/config";
 import { useMasterDataAvailability } from "@/hooks/useMasterDataAvailability";
-import { csvEscape } from "@/utils/importHelpers";
-import { AlertCircle, Database, Upload } from "lucide-react";
-import { useState } from "react";
+import type { ImportConfig, ProcessedRow } from "@/internalTypes/importConfig";
+import specimenDefinitionApi from "@/types/emr/specimenDefinition/specimenDefinitionApi";
+import { mutate } from "@/Utils/request/mutate";
 
-import MasterDataFileSelector from "@/components/shared/MasterDataFileSelector";
-import SpecimenDefinitionCsvImport from "./SpecimenDefinitionCsvImport";
-import SpecimenDefinitionMasterImport from "./SpecimenDefinitionMasterImport";
-
-interface SpecimenDefinitionImportProps {
+interface SpecimenDefinitionImportNewProps {
   facilityId?: string;
 }
 
 type ActiveView =
   | { kind: "upload" }
-  | { kind: "csv"; csvText: string }
+  | { kind: "csv-flow" }
   | { kind: "master-select" }
-  | { kind: "master"; csvText: string };
+  | {
+      kind: "master-import";
+      processedRows: ProcessedRow<SpecimenDefinitionRow>[];
+    };
 
-export default function SpecimenDefinitionImport({
+/**
+ * SpecimenDefinition import page supporting both CSV upload and master data imports.
+ *
+ * - CSV path: ImportFlow handles upload/validation via config (zod schema)
+ * - Master data path: parse → validating (code lookup) → ImportFlow with processedRows
+ */
+export default function SpecimenDefinitionImportNew({
   facilityId,
-}: SpecimenDefinitionImportProps) {
+}: SpecimenDefinitionImportNewProps) {
   const [activeView, setActiveView] = useState<ActiveView>({ kind: "upload" });
-  const [uploadError, setUploadError] = useState("");
-  const [uploadedFileName, setUploadedFileName] = useState("");
 
   const { availability, files } = useMasterDataAvailability();
-  const repoFileAvailable = availability["specimen-definition"];
-  const disableManualUpload = disableOverride && repoFileAvailable;
+  const hasMasterFiles = availability["specimen-definition"];
+  const disableManualUpload = disableOverride && hasMasterFiles;
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (disableManualUpload) {
-      setUploadError(
-        "Manual uploads are disabled because specimen definition data is bundled with this build.",
-      );
-      setUploadedFileName("");
-      return;
-    }
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // ─── Base Config (shared by CSV and master paths) ─────────────────
+  const createBaseConfig = useCallback(() => {
+    const base = {
+      resourceName: "Specimen Definition" as const,
+      resourceNamePlural: "Specimen Definitions" as const,
+      getRowIdentifier: (row: { slug_value?: string }) => row.slug_value ?? "",
 
-    if (file.type !== "text/csv" && !file.name.endsWith(".csv")) {
-      setUploadError("Please upload a valid CSV file");
-      setUploadedFileName("");
-      return;
-    }
-
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const csvText = e.target?.result as string;
-        setUploadError("");
-        setUploadedFileName(file.name);
-        setActiveView({ kind: "csv", csvText });
-      } catch {
-        setUploadError("Error reading CSV file");
-      }
+      checkExists: async (row: { slug_value?: string }) => {
+        if (!facilityId) return undefined;
+        const slug = `f-${facilityId}-${row.slug_value}`;
+        try {
+          await request(specimenDefinitionApi.retrieveSpecimenDefinition, {
+            pathParams: { facilityId, specimenSlug: slug },
+          });
+          return slug;
+        } catch (error) {
+          if (error instanceof HttpError && error.status === 404) {
+            return undefined;
+          }
+          throw error;
+        }
+      },
     };
-    reader.readAsText(file);
-  };
+    return base;
+  }, [facilityId]);
 
-  const handleBundledImport = () => {
-    setActiveView({ kind: "master-select" });
-  };
+  // ─── CSV Import Config ────────────────────────────────────────────
+  const csvImportConfig: ImportConfig<SpecimenDefinitionCsvRow> = useMemo(
+    () => ({
+      ...createBaseConfig(),
 
-  const downloadSample = () => {
-    const headers = [
-      "title",
-      "slug_value",
-      "description",
-      "derived_from_uri",
-      "type_collected_system",
-      "type_collected_code",
-      "type_collected_display",
-      "collection_system",
-      "collection_code",
-      "collection_display",
-      "is_derived",
-      "preference",
-      "single_use",
-      "requirement",
-      "retention_value",
-      "retention_unit_system",
-      "retention_unit_code",
-      "retention_unit_display",
-      "container_description",
-      "container_capacity_value",
-      "container_capacity_unit_system",
-      "container_capacity_unit_code",
-      "container_capacity_unit_display",
-      "container_minimum_volume_quantity_value",
-      "container_minimum_volume_quantity_unit_system",
-      "container_minimum_volume_quantity_unit_code",
-      "container_minimum_volume_quantity_unit_display",
-      "container_minimum_volume_string",
-      "container_cap_system",
-      "container_cap_code",
-      "container_cap_display",
-      "container_preparation",
-    ];
+      // CSV parsing
+      requiredHeaders: SD_REQUIRED_HEADERS,
+      headerMap: SD_HEADER_MAP,
+      schema: SpecimenDefinitionRowSchema,
+      parseRow: parseSpecimenDefinitionRow,
 
-    const rows = [
-      [
-        "Blood",
-        "blood",
-        "Blood",
-        "",
-        "http://terminology.hl7.org/CodeSystem/v2-0487",
-        "ACNFLD",
-        "Fluid, Acne",
-        "http://snomed.info/sct",
-        "278450005",
-        "Finger stick",
-        "true",
-        "preferred",
-        "true",
-        "Requirement",
-        "1.00",
-        "http://unitsofmeasure.org",
-        "h",
-        "hours",
-        "Container Description",
-        "5.00",
-        "http://unitsofmeasure.org",
-        "mL",
-        "milliliter",
-        "5.00",
-        "http://unitsofmeasure.org",
-        "mL",
-        "milliliter",
-        "",
-        "http://terminology.hl7.org/CodeSystem/container-cap",
-        "black",
-        "black cap",
-        "Container Prep",
-      ].map(csvEscape),
-    ];
+      // Cross-row validation (async — also validates codes against valueset API)
+      validateRows: (rows) => validateSpecimenDefinitionRows(rows),
 
-    const sampleCSV =
-      `${headers.join(",")}` +
-      `\n${rows.map((row) => row.join(",")).join("\n")}`;
-    const blob = new Blob([sampleCSV], { type: "text/csv" });
-    const url = window.URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "sample_specimen_definition.csv";
-    a.click();
-    window.URL.revokeObjectURL(url);
-  };
+      // API operations
+      createResource: async (row) => {
+        if (!facilityId) return;
+        await mutate(specimenDefinitionApi.createSpecimenDefinition, {
+          pathParams: { facilityId },
+        })(toSpecimenDefinitionCsvPayload(row));
+      },
 
-  const handleBack = () => {
+      updateResource: async (existingSlug, row) => {
+        if (!facilityId) return;
+        await mutate(specimenDefinitionApi.updateSpecimenDefinition, {
+          pathParams: { facilityId, specimenSlug: existingSlug },
+        })(toSpecimenDefinitionCsvPayload(row, existingSlug));
+      },
+
+      // UI
+      reviewColumns: SD_CSV_REVIEW_COLUMNS,
+      description:
+        "Upload a CSV to import specimen definitions. Codes will be validated during import.",
+      uploadHints: [
+        "Required: title, slug_value, description, type_collected (system/code/display)",
+        "Existing items with same slug will be updated",
+      ],
+      sampleCsv: SD_SAMPLE_CSV,
+    }),
+    [facilityId, createBaseConfig],
+  );
+
+  // ─── Master Data Import Config ────────────────────────────────────
+  const masterImportConfig: ImportConfig<SpecimenDefinitionRow> = useMemo(
+    () => ({
+      ...createBaseConfig(),
+      reviewColumns: SD_REVIEW_COLUMNS,
+
+      // Cross-row validation (async — validates codes against valueset API)
+      validateRows: (rows) => validateSpecimenDefinitionMasterRows(rows),
+
+      createResource: async (row) => {
+        if (!facilityId) return;
+        await mutate(specimenDefinitionApi.createSpecimenDefinition, {
+          pathParams: { facilityId },
+        })(toSpecimenDefinitionDatapoint(row));
+      },
+
+      updateResource: async (existingSlug, row) => {
+        if (!facilityId) return;
+        await mutate(specimenDefinitionApi.updateSpecimenDefinition, {
+          pathParams: { facilityId, specimenSlug: existingSlug },
+        })(toSpecimenDefinitionDatapoint(row, existingSlug));
+      },
+    }),
+    [facilityId, createBaseConfig],
+  );
+
+  // ─── Handlers ────────────────────────────────────────────────────
+  const handleBack = useCallback(() => {
     setActiveView({ kind: "upload" });
-    setUploadedFileName("");
-  };
+  }, []);
 
-  if (activeView.kind === "csv") {
+  const handleMasterCsvText = useCallback((csvText: string) => {
+    const rows = parseMasterCsvToRows(csvText);
+    setActiveView({ kind: "master-import", processedRows: rows });
+  }, []);
+
+  // ─── Upload Screen ─────────────────────────────────────────────────
+  if (activeView.kind === "upload" || activeView.kind === "csv-flow") {
+    const showGrid = activeView.kind === "upload";
     return (
-      <SpecimenDefinitionCsvImport
-        facilityId={facilityId}
-        initialCsvText={activeView.csvText}
-        onBack={handleBack}
-      />
+      <div
+        className={
+          showGrid
+            ? "max-w-5xl mx-auto grid gap-6 md:grid-cols-2 items-start"
+            : ""
+        }
+      >
+        <ImportFlow
+          config={csvImportConfig}
+          disableUpload={disableManualUpload}
+          disabledMessage="Manual uploads are disabled because this build includes a specimen definition dataset in the repository."
+          onStepChange={(step) =>
+            setActiveView({ kind: step === "upload" ? "upload" : "csv-flow" })
+          }
+        />
+        {/* Master Data Card */}
+        {showGrid && (
+          <Card className="h-full flex flex-col">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <Database className="h-5 w-5" />
+                Import Specimen Definitions from dataset
+              </CardTitle>
+              <CardDescription>
+                Import data for Specimen Definitions from available master
+                dataset.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-row gap-4 flex-1">
+              <div className="rounded-lg border border-gray-200 px-6 py-12 text-center w-full flex flex-col items-center justify-between">
+                <div className="flex flex-col items-center gap-4 flex-1 justify-center">
+                  <Database className="h-12 w-12 text-gray-400" />
+                  {hasMasterFiles ? (
+                    <>
+                      <p className="text-lg font-medium text-gray-600">
+                        Upload from master dataset
+                      </p>
+                      <p className="text-xs text-gray-400">
+                        A bundled dataset is available in this build.
+                      </p>
+                    </>
+                  ) : (
+                    <p className="text-gray-600 text-sm">
+                      No bundled dataset was detected for this build. Upload a
+                      CSV file to import manually.
+                    </p>
+                  )}
+                </div>
+                {hasMasterFiles && (
+                  <div className="mt-4">
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setActiveView({ kind: "master-select" })}
+                    >
+                      Import Master Data
+                    </Button>
+                  </div>
+                )}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+      </div>
     );
   }
 
+  // ─── Master File Selector ─────────────────────────────────────────
   if (activeView.kind === "master-select") {
     return (
       <MasterDataFileSelector
         title="Specimen Definitions"
         files={files["specimen-definition"]}
-        onFileSelected={(csvText) => setActiveView({ kind: "master", csvText })}
+        onFileSelected={(csvText) => handleMasterCsvText(csvText)}
         onBack={handleBack}
       />
     );
   }
 
-  if (activeView.kind === "master") {
-    return (
-      <SpecimenDefinitionMasterImport
-        facilityId={facilityId}
-        initialCsvText={activeView.csvText}
-        onBack={handleBack}
-      />
-    );
-  }
-
+  // ─── Master Data Import Flow (default) ────────────────────────────
   return (
-    <div className="max-w-5xl mx-auto grid gap-6 md:grid-cols-2 items-start">
-      <Card className="h-full">
-        <CardHeader>
-          <CardTitle className="flex items-center gap-2">
-            <Upload className="h-5 w-5" />
-            Import Specimen Definitions from CSV
-          </CardTitle>
-          <CardDescription>
-            Upload a CSV file to create specimen definitions and validate them
-            before import.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="border-2 border-dashed border-gray-300 rounded-lg p-8 text-center">
-            <input
-              type="file"
-              accept=".csv"
-              onChange={handleFileUpload}
-              className="hidden"
-              id="specimen-definition-csv-upload"
-              disabled={disableManualUpload}
-            />
-            <label
-              htmlFor="specimen-definition-csv-upload"
-              className={
-                disableManualUpload
-                  ? "cursor-not-allowed opacity-60"
-                  : "cursor-pointer"
-              }
-            >
-              <div className="flex flex-col items-center gap-4">
-                <Upload className="h-12 w-12 text-gray-400" />
-                <div>
-                  <p className="text-lg font-medium">
-                    Click to upload CSV file
-                  </p>
-                  <p className="text-sm text-gray-500">or drag and drop</p>
-                </div>
-                <p className="text-xs text-gray-400">
-                  Required columns: title, slug_value, description,
-                  type_collected_system, type_collected_code,
-                  type_collected_display
-                </p>
-                <Button variant="outline" size="sm" onClick={downloadSample}>
-                  Download Sample CSV
-                </Button>
-              </div>
-            </label>
-          </div>
-
-          {uploadedFileName && (
-            <p className="mt-3 text-sm text-gray-600">
-              Selected file: {uploadedFileName}
-            </p>
-          )}
-
-          {disableManualUpload && (
-            <Alert className="mt-4">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>
-                Manual uploads are disabled because this build includes a
-                specimen definition dataset in the repository.
-              </AlertDescription>
-            </Alert>
-          )}
-
-          {uploadError && (
-            <Alert className="mt-4" variant="destructive">
-              <AlertCircle className="h-4 w-4" />
-              <AlertDescription>{uploadError}</AlertDescription>
-            </Alert>
-          )}
-        </CardContent>
-      </Card>
-      <Card className="h-full flex flex-col">
-        <CardHeader>
-          <CardTitle>Import Specimen Definitions from dataset</CardTitle>
-          <CardDescription>
-            Import data for Specimen Definitions from available master dataset.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="flex flex-col gap-4 flex-1">
-          <div className="rounded-lg border border-gray-200 px-6 py-8 text-center text-s">
-            <div className="flex flex-col items-center gap-4">
-              <Database className="h-12 w-12 text-gray-400" />
-              <div className="space-y-3">
-                {repoFileAvailable ? (
-                  <div className="flex flex-col items-center gap-4">
-                    <p className="text-lg font-medium text-gray-600">
-                      Click to Upload from master dataset
-                    </p>
-                    <p className="text-xs text-gray-400">
-                      A bundled dataset is available in this build. You can
-                      import it directly without uploading a CSV file.
-                    </p>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={handleBundledImport}
-                      disabled={!repoFileAvailable}
-                    >
-                      Import Master Data
-                    </Button>
-                  </div>
-                ) : (
-                  <p className="text-gray-600">
-                    No bundled dataset was detected for this build. You can
-                    upload a CSV file to import specimen definitions manually.
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
-    </div>
+    <ImportFlow
+      config={masterImportConfig}
+      processedRows={activeView.processedRows}
+      onBack={handleBack}
+    />
   );
 }

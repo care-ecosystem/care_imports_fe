@@ -1,51 +1,10 @@
 import ExportCard from "@/components/shared/ExportCard";
-import { stripFacilitySlugPrefix } from "@/utils/export";
+import type { SpecimenDefinitionRead } from "@/types/emr/specimenDefinition/specimenDefinition";
+import specimenDefinitionApi from "@/types/emr/specimenDefinition/specimenDefinitionApi";
+import { stripFacilitySlugPrefix } from "@/Utils/export";
 
 interface SpecimenDefinitionExportProps {
   facilityId?: string;
-}
-
-interface CodePayload {
-  system?: string;
-  code?: string;
-  display?: string;
-}
-
-interface QuantitySpec {
-  value?: string;
-  unit?: CodePayload;
-}
-
-interface DurationSpec {
-  value?: string;
-  unit?: CodePayload;
-}
-
-interface ContainerSpec {
-  description?: string;
-  capacity?: QuantitySpec | null;
-}
-
-interface TypeTestedSpec {
-  is_derived?: boolean;
-  preference?: string;
-  single_use?: boolean | null;
-  requirement?: string;
-  retention_time?: DurationSpec | null;
-  container?: ContainerSpec | null;
-}
-
-interface SpecimenDefinitionRead {
-  id: string;
-  title: string;
-  slug: string;
-  slug_config?: { slug_value: string };
-  description?: string;
-  status?: string;
-  derived_from_uri?: string;
-  type_collected?: CodePayload;
-  collection?: CodePayload;
-  type_tested?: TypeTestedSpec;
 }
 
 const CSV_HEADERS = [
@@ -85,7 +44,8 @@ export default function SpecimenDefinitionExport({
       title="Export Specimen Definitions"
       description="Export all specimen definitions as a CSV file matching the import format."
       queryKey={["specimen-definitions", facilityId]}
-      apiPath={`/api/v1/facility/${facilityId}/specimen_definition/`}
+      route={specimenDefinitionApi.listSpecimenDefinitions}
+      pathParams={{ facilityId }}
       csvHeaders={CSV_HEADERS}
       mapRow={(item) => {
         const tt = item.type_tested;

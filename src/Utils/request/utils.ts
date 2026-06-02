@@ -1,0 +1,135 @@
+import { LocalStorageKeys } from "@/common/constants";
+import { HttpMethod, QueryParams, Type } from "@/Utils/request/types";
+
+const VALID_METHODS = Object.values(HttpMethod);
+
+export const API = <TResponse, TBody = undefined>(
+  route: `${HttpMethod} ${string}`,
+) => {
+  const trimmedRoute = route.trim();
+  const firstSpace = trimmedRoute.indexOf(" ");
+
+  if (firstSpace === -1) {
+    throw new Error(
+      `Invalid route format "${route}". Expected format: "METHOD /path"`,
+    );
+  }
+
+  const method = trimmedRoute.slice(0, firstSpace) as HttpMethod;
+  const path = trimmedRoute.slice(firstSpace + 1);
+
+  if (path.trim().includes(" ")) {
+    throw new Error(
+      `Invalid route format "${route}". Path must not contain spaces`,
+    );
+  }
+
+  if (!VALID_METHODS.includes(method)) {
+    throw new Error(`Invalid HTTP method: ${method}`);
+  }
+
+  if (!path || !path.startsWith("/")) {
+    throw new Error(`Invalid path "${path}". Must start with "/"`);
+  }
+
+  return {
+    path,
+    method,
+    TRes: Type<TResponse>(),
+    TBody: Type<TBody>(),
+  };
+};
+
+export function makeUrl(
+  path: string,
+  query?: QueryParams,
+  pathParams?: Record<string, string | number>,
+) {
+  if (pathParams) {
+    path = Object.entries(pathParams).reduce(
+      (acc, [key, value]) => acc.replace(`{${key}}`, `${value}`),
+      path,
+    );
+  }
+
+  if (query) {
+    const queryString = makeQueryParams(query);
+    if (queryString) {
+      path += `?${queryString}`;
+    }
+  }
+
+  return path;
+}
+
+const makeQueryParams = (query: QueryParams) => {
+  const qParams = new URLSearchParams();
+
+  Object.entries(query).forEach(([key, value]) => {
+    if (value === undefined) return;
+
+    if (Array.isArray(value)) {
+      value.forEach((v) => qParams.append(key, `${v}`));
+      return;
+    }
+
+    qParams.set(key, `${value}`);
+  });
+
+  return qParams.toString();
+};
+
+export function makeHeaders(
+  noAuth: boolean,
+  additionalHeaders?: HeadersInit,
+  isFormData?: boolean,
+) {
+  const headers = new Headers(additionalHeaders);
+
+  if (!isFormData) {
+    headers.set("Content-Type", "application/json");
+  }
+  headers.append("Accept", "application/json");
+
+  const authorizationHeader = getAuthorizationHeader();
+  if (authorizationHeader && !noAuth) {
+    headers.set("Authorization", authorizationHeader);
+  }
+
+  return headers;
+}
+
+export function getAuthorizationHeader() {
+  const accessToken = localStorage.getItem(LocalStorageKeys.accessToken);
+
+  if (accessToken) {
+    return `Bearer ${accessToken}`;
+  }
+
+  return null;
+}
+
+export async function getResponseBody<TData>(res: Response): Promise<TData> {
+  if (!(res.headers.get("content-length") !== "0")) {
+    return null as TData;
+  }
+
+  const contentType = res.headers.get("content-type") || "";
+  const isJson = contentType.includes("application/json");
+  const isBinary =
+    contentType.includes("image") || contentType.includes("application/pdf");
+
+  if (isBinary) {
+    return (await res.blob()) as TData;
+  }
+
+  if (!isJson) {
+    return (await res.text()) as TData;
+  }
+
+  try {
+    return await res.json();
+  } catch {
+    return (await res.text()) as TData;
+  }
+}

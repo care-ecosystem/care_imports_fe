@@ -1,31 +1,10 @@
 import ExportCard from "@/components/shared/ExportCard";
-import { stripFacilitySlugPrefix } from "@/utils/export";
+import type { ProductRead } from "@/types/inventory/product/product";
+import productApi from "@/types/inventory/product/productApi";
+import { stripFacilitySlugPrefix } from "@/Utils/export";
 
 interface ProductExportProps {
   facilityId?: string;
-}
-
-interface BatchSpec {
-  lot_number?: string;
-}
-
-interface ProductKnowledgeRef {
-  name?: string;
-  slug?: string;
-}
-
-interface ChargeItemDefinitionRef {
-  title?: string;
-  slug?: string;
-}
-
-interface ProductRead {
-  id: string;
-  status: string;
-  product_knowledge?: ProductKnowledgeRef | null;
-  charge_item_definition?: ChargeItemDefinitionRef | null;
-  batch?: BatchSpec | null;
-  expiration_date?: string;
 }
 
 const CSV_HEADERS = [
@@ -50,29 +29,44 @@ export default function ProductExport({ facilityId }: ProductExportProps) {
       title="Export Products"
       description="Export all products as a CSV file matching the import format."
       queryKey={["product", facilityId]}
-      apiPath={`/api/v1/facility/${facilityId}/product/`}
+      route={productApi.listProduct}
+      pathParams={{ facilityId }}
       csvHeaders={CSV_HEADERS}
       mapRow={(item) => {
-        const pkSlug = item.product_knowledge?.slug
-          ? stripFacilitySlugPrefix(item.product_knowledge.slug)
-          : "";
-        const cidSlug = item.charge_item_definition?.slug
-          ? stripFacilitySlugPrefix(item.charge_item_definition.slug)
-          : "";
+        const pkSlugValue =
+          item.product_knowledge?.slug_config?.slug_value ??
+          (item.product_knowledge?.slug
+            ? stripFacilitySlugPrefix(item.product_knowledge.slug)
+            : "");
+        const cidSlugValue =
+          item.charge_item_definition?.slug_config?.slug_value ??
+          (item.charge_item_definition?.slug
+            ? stripFacilitySlugPrefix(item.charge_item_definition.slug)
+            : "");
+
+        const productType = item.product_knowledge?.product_type ?? "";
+
+        const basePrice =
+          item.charge_item_definition?.price_components?.find(
+            (pc) => pc.monetary_component_type === "base",
+          )?.amount ?? "";
+
+        const dosageForm =
+          item.product_knowledge?.definitional?.dosage_form?.display ?? "";
 
         return [
           item.product_knowledge?.name ?? "",
-          "", // type is on product_knowledge, not directly on product
-          "", // basePrice – not stored on product directly
-          "", // inventoryQuantity – not stored on product directly
-          "", // dosageForm – not stored on product directly
+          productType,
+          String(basePrice),
+          "", // inventoryQuantity – not available on individual product record
+          dosageForm,
           item.batch?.lot_number ?? "",
           item.expiration_date ?? "",
           item.product_knowledge?.name ?? "",
           item.charge_item_definition?.title ?? "",
-          pkSlug,
-          cidSlug,
-        ];
+          pkSlugValue,
+          cidSlugValue,
+        ].map(String);
       }}
       filename={`products_export_${facilityId}.csv`}
       enabled={Boolean(facilityId)}

@@ -12,8 +12,10 @@ node_modules
 .pnp
 .pnp.js
 
-# Testing
-coverage
+# Playwright tests
+/test-results/
+/playwright-report/
+/tests/.auth/
 
 # Production
 dist

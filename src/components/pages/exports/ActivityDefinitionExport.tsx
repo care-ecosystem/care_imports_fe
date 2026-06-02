@@ -13,12 +13,14 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { Progress } from "@/components/ui/progress";
-import type { PaginatedResponse } from "@/utils/export";
+import type { SlugConfig } from "@/types/base/slug/slugConfig";
+import type { ActivityDefinitionReadSpec } from "@/types/emr/activityDefinition/activityDefinition";
+import activityDefinitionApi from "@/types/emr/activityDefinition/activityDefinitionApi";
 import {
   downloadCsv,
   stripFacilitySlugPrefix,
   toCsvString,
-} from "@/utils/export";
+} from "@/Utils/export";
 
 /* ------------------------------------------------------------------ */
 /*  Types                                                              */
@@ -26,55 +28,6 @@ import {
 
 interface ActivityDefinitionExportProps {
   facilityId?: string;
-}
-
-interface CodePayload {
-  system?: string;
-  code?: string;
-  display?: string;
-}
-
-interface SlugRef {
-  slug?: string;
-  slug_config?: { slug_value: string };
-}
-
-interface LocationRef {
-  id?: string;
-  name?: string;
-}
-
-interface HealthcareServiceRef {
-  id?: string;
-  name?: string;
-}
-
-interface ResourceCategoryRef {
-  title?: string;
-  slug?: string;
-}
-
-/** Shape returned by both the list and detail endpoints. */
-interface ActivityDefinitionRead {
-  id: string;
-  title: string;
-  slug: string;
-  slug_config?: { slug_value: string };
-  description?: string;
-  usage?: string;
-  status?: string;
-  classification?: string;
-  kind?: string;
-  code?: CodePayload;
-  body_site?: CodePayload | null;
-  diagnostic_report_codes?: CodePayload[];
-  derived_from_uri?: string;
-  category?: ResourceCategoryRef;
-  specimen_requirements?: (SlugRef & Record<string, unknown>)[];
-  observation_result_requirements?: (SlugRef & Record<string, unknown>)[];
-  charge_item_definitions?: (SlugRef & Record<string, unknown>)[];
-  locations?: LocationRef[];
-  healthcare_service?: HealthcareServiceRef | null;
 }
 
 /* ------------------------------------------------------------------ */
@@ -115,7 +68,7 @@ const CSV_HEADERS = [
 /*  Helpers                                                            */
 /* ------------------------------------------------------------------ */
 
-function extractSlug(ref: SlugRef): string {
+function extractSlug(ref: { slug: string; slug_config: SlugConfig }): string {
   return ref.slug_config?.slug_value ?? stripFacilitySlugPrefix(ref.slug ?? "");
 }
 
@@ -127,22 +80,21 @@ async function fetchDetails(
   facilityId: string,
   slugs: string[],
   onProgress: (done: number) => void,
-): Promise<ActivityDefinitionRead[]> {
-  const results: ActivityDefinitionRead[] = new Array(slugs.length);
+): Promise<ActivityDefinitionReadSpec[]> {
+  const results: ActivityDefinitionReadSpec[] = new Array(slugs.length);
   let completed = 0;
 
   // Process in chunks of DETAIL_CONCURRENCY
   for (let i = 0; i < slugs.length; i += DETAIL_CONCURRENCY) {
     const batch = slugs.slice(i, i + DETAIL_CONCURRENCY);
     const promises = batch.map((slug, batchIdx) => {
-      const url = `/api/v1/facility/${facilityId}/activity_definition/${slug}/`;
-      return request<ActivityDefinitionRead>(url, { method: "GET" }).then(
-        (detail) => {
-          results[i + batchIdx] = detail;
-          completed += 1;
-          onProgress(completed);
-        },
-      );
+      return request(activityDefinitionApi.retrieveActivityDefinition, {
+        pathParams: { facilityId, activityDefinitionSlug: slug },
+      }).then((detail) => {
+        results[i + batchIdx] = detail;
+        completed += 1;
+        onProgress(completed);
+      });
     });
     await Promise.all(promises);
   }
@@ -150,7 +102,7 @@ async function fetchDetails(
   return results;
 }
 
-function mapRow(item: ActivityDefinitionRead): string[] {
+function mapRow(item: ActivityDefinitionReadSpec): string[] {
   const slug = stripFacilitySlugPrefix(
     item.slug_config?.slug_value ?? item.slug ?? "",
   );
@@ -224,8 +176,6 @@ export default function ActivityDefinitionExport({
 }
 
 function ActivityDefinitionExportInner({ facilityId }: { facilityId: string }) {
-  const apiPath = `/api/v1/facility/${facilityId}/activity_definition/`;
-
   /* ---- Phase 1: paginated list fetch ---- */
   const {
     data,
@@ -238,9 +188,9 @@ function ActivityDefinitionExportInner({ facilityId }: { facilityId: string }) {
   } = useInfiniteQuery({
     queryKey: ["export", "activity-definition", facilityId],
     queryFn: async ({ pageParam = 0 }) => {
-      const url = `${apiPath}?limit=${PAGE_SIZE}&offset=${pageParam}`;
-      return await request<PaginatedResponse<ActivityDefinitionRead>>(url, {
-        method: "GET",
+      return await request(activityDefinitionApi.listActivityDefinition, {
+        pathParams: { facilityId },
+        queryParams: { limit: PAGE_SIZE, offset: pageParam },
       });
     },
     initialPageParam: 0,
@@ -272,7 +222,7 @@ function ActivityDefinitionExportInner({ facilityId }: { facilityId: string }) {
 
   /* ---- Phase 2: detail enrichment ---- */
   const [enrichedItems, setEnrichedItems] = useState<
-    ActivityDefinitionRead[] | null
+    ActivityDefinitionReadSpec[] | null
   >(null);
   const [detailFetched, setDetailFetched] = useState(0);
   const [isEnriching, setIsEnriching] = useState(false);
