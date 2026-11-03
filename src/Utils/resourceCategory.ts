@@ -73,7 +73,7 @@ export async function upsertResourceCategories({
           title: category,
           slug_value: `${slugPrefix}-${slug}`,
           resource_type: resourceType,
-          resource_sub_type: ResourceCategorySubType.other,
+          resource_sub_type: ResourceCategorySubType.allother,
         });
       }),
     );
