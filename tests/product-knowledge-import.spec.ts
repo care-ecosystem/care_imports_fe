@@ -112,7 +112,7 @@ test.describe("Product Knowledge Import", () => {
         data: {
           title: testCategoryTitle,
           resource_type: "product_knowledge",
-          resource_sub_type: "other",
+          resource_sub_type: "all:other",
         },
       },
     );
