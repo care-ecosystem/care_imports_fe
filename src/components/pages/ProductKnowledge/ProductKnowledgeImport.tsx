@@ -275,7 +275,7 @@ export default function ProductKnowledgeImportNew({
                 <ResourceCategoryPicker
                   facilityId={facilityId}
                   resourceType={ResourceCategoryResourceType.product_knowledge}
-                  resourceSubType={ResourceCategorySubType.other}
+                  resourceSubType={ResourceCategorySubType.allother}
                   value={category?.slug}
                   onValueChange={(cat) => setCategory(cat)}
                   placeholder="Select a category (optional, overrides CSV)"
